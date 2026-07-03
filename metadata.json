@@ -1,0 +1,6 @@
+{
+  "name": "SPSMUN 2026 Portal",
+  "description": "Retro 8-Bit standalone Pokémon Battle Simulator and Championship game console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
