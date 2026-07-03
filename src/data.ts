@@ -2513,25 +2513,25 @@ export interface NpcTrainer {
 
 export const NPC_TRAINERS: NpcTrainer[] = [
   {
-    name: "Aman Chopra",
+    name: "Trainer 1",
     role: "UNSC Chair",
     avatar: "🤵",
     team: ["Pikachu", "Eevee", "Gengar"],
     difficulty: "Easy",
-    intro: "The Security Council is now in session. Show me your debate skills on the battle field!",
+    intro: "The Security Council is now in session. Show me your debate skills on the battlefield!",
     outro: "An impressive resolution, delegate. You've won this round."
   },
   {
-    name: "Sathya Narayanan",
-    role: "Head of Tech Department",
-    avatar: "💻",
+    name: "Trainer 2",
+    role: "Director-General",
+    avatar: "📋",
     team: ["Lucario", "Blastoise", "Gyarados", "Scizor"],
     difficulty: "Medium",
-    intro: "I built this entire MUN tech system, including this simulator! Let's see if you can bypass my defenses.",
+    intro: "As the Director-General, I ensure every committee has flawless logistics. Let's see if you can manage my perfectly coordinated team!",
     outro: "Incredible! Your battle logic is completely flawless!"
   },
   {
-    name: "Sheena Malik",
+    name: "Trainer 3",
     role: "Model UN Veteran & Mentor",
     avatar: "🎓",
     team: ["Charizard", "Venusaur", "Gardevoir", "Sylveon", "Lugia"],
@@ -2540,13 +2540,22 @@ export const NPC_TRAINERS: NpcTrainer[] = [
     outro: "Splendid! Your strategic tactical focus rivals the best diplomat I have ever mentored."
   },
   {
-    name: "Dr. K. S. Sangwan",
+    name: "Trainer 4",
     role: "School Principal (The MUN Boss)",
     avatar: "👑",
     team: ["Mewtwo", "Rayquaza", "Garchomp", "Aegislash", "Kyogre", "Groudon"],
     difficulty: "Champion",
-    intro: "Sathya's Public School is built on excellence, discipline, and impact. Show me the absolute peak of your delegate strength!",
-    outro: "Extraordinary! You truly embody the spirit of the Sathya Public School MUN 3.0. Here is your champion's discount voucher!"
+    intro: "Our Public School is built on excellence, discipline, and impact. Show me the absolute peak of your delegate strength!",
+    outro: "Extraordinary! You truly embody the spirit of the School MUN 3.0!"
+  },
+  {
+    name: "Kartik Kumar",
+    role: "Head of Tech Department of whole 6v6 Pokémon, not 6v6 3v3 Pokémon",
+    avatar: "⚡",
+    team: ["Greninja", "Charizard", "Rayquaza", "Mewtwo", "Garchomp", "Lucario"],
+    difficulty: "Champion",
+    intro: "I am the Head of Tech Department of whole 6v6 Pokémon, not 6v6 3v3 Pokémon! I built this entire MUN tech system, including this simulator! Let's see if you can bypass my defenses.",
+    outro: "Phenomenal! Your battle execution is unparalleled. You are the ultimate Grand Champion!"
   }
 ];
 

@@ -57,7 +57,7 @@ export default function App() {
         <div className="flex items-center gap-2.5">
           <Gamepad2 className="text-amber-500 animate-pulse" size={22} />
           <div>
-            <h1 className="font-cinzel font-bold text-sm sm:text-base tracking-wider text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.2)]">
+            <h1 className="pokemon-logo-text-sm text-sm tracking-wider">
               POKÉMON ARENA CONSOLE
             </h1>
             <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">
@@ -102,18 +102,18 @@ export default function App() {
             {/* Game Logo */}
             <div className="mt-8 mb-10 flex flex-col items-center">
               <div className="relative">
-                <Swords className="text-amber-500 animate-bounce mb-3" size={48} />
+                <Swords className="text-[#ffcc00] drop-shadow-[0_2px_0_#3b4cca] animate-bounce mb-3" size={48} />
                 <div className="absolute inset-0 bg-amber-500/10 blur-xl rounded-full" />
               </div>
-              <h2 className="font-cinzel font-black text-4xl sm:text-5xl text-amber-500 tracking-wider select-none leading-none">
+              <h2 className="pokemon-logo-text text-4xl sm:text-5xl select-none leading-none scale-110">
                 POKÉMON
               </h2>
-              <h3 className="font-cinzel font-bold text-2xl sm:text-3xl text-slate-100 tracking-widest mt-1 select-none">
+              <h3 className="pokemon-logo-text text-2xl sm:text-3xl tracking-wider mt-2 select-none brightness-110">
                 SHOWDOWN
               </h3>
-              <div className="h-0.5 w-24 bg-gradient-to-r from-transparent via-amber-500/60 to-transparent mt-3" />
-              <p className="text-[10px] font-mono text-slate-400 mt-2 tracking-widest uppercase">
-                Offline Arena Simulator
+              <div className="h-0.5 w-24 bg-gradient-to-r from-transparent via-amber-500/60 to-transparent mt-3.5" />
+              <p className="text-[9px] font-pressstart text-[#ffcc00] mt-2 tracking-widest uppercase scale-90 opacity-90">
+                ARENA CONSOLE
               </p>
             </div>
 
@@ -165,12 +165,12 @@ export default function App() {
             {/* Blinking Press Start Button */}
             <button
               onClick={handleBoot}
-              className="group w-full bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-cinzel font-bold text-lg py-3.5 rounded-2xl shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_30px_rgba(245,158,11,0.45)] transition-all flex items-center justify-center gap-2"
+              className="group w-full bg-gradient-to-b from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-slate-950 font-pressstart text-[10px] py-4 rounded-2xl shadow-[0_0_20px_rgba(251,191,36,0.3)] hover:shadow-[0_0_30px_rgba(251,191,36,0.55)] transition-all flex items-center justify-center gap-2 border-2 border-[#3b4cca]"
             >
               <span className={isBlinking ? 'opacity-100' : 'opacity-40'}>
-                PRESS START TO BATTLE
+                PRESS START
               </span>
-              <Sparkles className="animate-spin text-slate-950 group-hover:scale-110 transition-transform" size={16} />
+              <Sparkles className="animate-spin text-slate-950 group-hover:scale-110 transition-transform" size={14} />
             </button>
 
             <div className="mt-6 flex justify-center gap-4 text-[10px] font-mono text-slate-500">

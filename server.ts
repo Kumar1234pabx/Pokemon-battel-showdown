@@ -86,6 +86,20 @@ let gameLeaderboard: Record<string, { wins: number; losses: number; name: string
   "9999988888": { wins: 3, losses: 0, name: "Tobi Madara", committee: "AIPPM" }
 };
 
+let matchmakingQueue: { phone: string; name: string; team: any[]; joinedAt: number }[] = [];
+let matchedBattles: Record<string, { battleId: string; opponentName: string }> = {};
+let customRooms: Record<string, {
+  code: string;
+  hostPhone: string;
+  hostName: string;
+  hostTeam: any[];
+  guestPhone?: string;
+  guestName?: string;
+  guestTeam?: any[];
+  battleId?: string;
+  createdAt: number;
+}> = {};
+
 // Cleanup inactive players & expired invites
 setInterval(() => {
   const now = Date.now();
@@ -95,6 +109,16 @@ setInterval(() => {
     }
   }
   battleInvites = battleInvites.filter(inv => now - parseInt(inv.id) < 60000);
+
+  // Clean matchmaking queue entries older than 45 seconds
+  matchmakingQueue = matchmakingQueue.filter(p => now - p.joinedAt < 45000);
+
+  // Clean custom rooms older than 1 hour
+  for (const code in customRooms) {
+    if (now - customRooms[code].createdAt > 3600000) {
+      delete customRooms[code];
+    }
+  }
 }, 5000);
 
 // Helper for type advantages in Pokémon Showdown
@@ -282,6 +306,179 @@ app.all("/api/proxy", async (req: any, res) => {
 });
 
 // MULTIPLAYER GAME PLATFORM ENDPOINTS
+
+// Join matchmaking queue
+app.post("/api/game/matchmake/join", (req, res) => {
+  const { phone, name, team } = req.body;
+  if (!phone || !name || !team || team.length < 3) {
+    return res.status(400).json({ error: "Missing identity or team." });
+  }
+
+  // Remove existing entry for this player
+  matchmakingQueue = matchmakingQueue.filter(p => p.phone !== phone);
+  delete matchedBattles[phone];
+
+  // Look for another available player in queue (joined within last 45 seconds)
+  const now = Date.now();
+  const opponent = matchmakingQueue.find(p => p.phone !== phone && (now - p.joinedAt) < 45000);
+
+  if (opponent) {
+    // Match found!
+    // Remove opponent from queue
+    matchmakingQueue = matchmakingQueue.filter(p => p.phone !== opponent.phone);
+
+    const battleId = "battle_match_" + phone + "_" + opponent.phone + "_" + Date.now();
+
+    // Create the battle state
+    activeBattles[battleId] = {
+      id: battleId,
+      player1Phone: opponent.phone,
+      player1Name: opponent.name,
+      player1Team: opponent.team,
+      player1ActiveIndex: 0,
+      player2Phone: phone,
+      player2Name: name,
+      player2Team: team,
+      player2ActiveIndex: 0,
+      turn: 1,
+      player1MoveName: null,
+      player2MoveName: null,
+      log: [`Online Matchmaking Battle started!`, `${opponent.name} vs ${name}!`],
+      winnerPhone: null,
+      status: 'active'
+    };
+
+    // Store match info
+    matchedBattles[phone] = { battleId, opponentName: opponent.name };
+    matchedBattles[opponent.phone] = { battleId, opponentName: name };
+
+    return res.json({ ok: true, matched: true, battleId, opponentName: opponent.name });
+  } else {
+    // No opponent yet, put us in queue
+    matchmakingQueue.push({ phone, name, team, joinedAt: now });
+    return res.json({ ok: true, matched: false });
+  }
+});
+
+// Check matchmaking status
+app.post("/api/game/matchmake/status", (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: "Missing phone." });
+
+  const match = matchedBattles[phone];
+  if (match) {
+    return res.json({ ok: true, matched: true, battleId: match.battleId, opponentName: match.opponentName });
+  }
+
+  // Check if player is still in queue and hasn't timed out (30 seconds)
+  const entry = matchmakingQueue.find(p => p.phone === phone);
+  if (entry) {
+    if (Date.now() - entry.joinedAt > 30000) {
+      // Timeout
+      matchmakingQueue = matchmakingQueue.filter(p => p.phone !== phone);
+      return res.json({ ok: true, matched: false, timeout: true });
+    }
+    return res.json({ ok: true, matched: false });
+  }
+
+  return res.json({ ok: true, matched: false, timeout: true });
+});
+
+// Cancel matchmaking
+app.post("/api/game/matchmake/cancel", (req, res) => {
+  const { phone } = req.body;
+  if (phone) {
+    matchmakingQueue = matchmakingQueue.filter(p => p.phone !== phone);
+  }
+  return res.json({ ok: true });
+});
+
+// Create custom room
+app.post("/api/game/room/create", (req, res) => {
+  const { phone, name, team } = req.body;
+  if (!phone || !name || !team || team.length < 3) {
+    return res.status(400).json({ error: "Missing room host details." });
+  }
+
+  // Generate a random 4-digit code that is not currently in use
+  let code = "";
+  do {
+    code = Math.floor(1000 + Math.random() * 9000).toString();
+  } while (customRooms[code]);
+
+  customRooms[code] = {
+    code,
+    hostPhone: phone,
+    hostName: name,
+    hostTeam: team,
+    createdAt: Date.now()
+  };
+
+  return res.json({ ok: true, code });
+});
+
+// Join custom room
+app.post("/api/game/room/join", (req, res) => {
+  const { code, phone, name, team } = req.body;
+  if (!code || !phone || !name || !team || team.length < 3) {
+    return res.status(400).json({ error: "Missing room join details." });
+  }
+
+  const room = customRooms[code];
+  if (!room) {
+    return res.json({ ok: false, error: "Room not found. Check your code!" });
+  }
+
+  if (room.hostPhone === phone) {
+    // Host is checking back in
+    return res.json({ ok: true, isHost: true, battleId: room.battleId });
+  }
+
+  if (room.guestPhone && room.guestPhone !== phone) {
+    return res.json({ ok: false, error: "This room is already full!" });
+  }
+
+  // Join the room as guest
+  room.guestPhone = phone;
+  room.guestName = name;
+  room.guestTeam = team;
+
+  // Create battle
+  const battleId = "battle_room_" + code;
+  room.battleId = battleId;
+
+  activeBattles[battleId] = {
+    id: battleId,
+    player1Phone: room.hostPhone,
+    player1Name: room.hostName,
+    player1Team: room.hostTeam,
+    player1ActiveIndex: 0,
+    player2Phone: room.guestPhone,
+    player2Name: room.guestName,
+    player2Team: room.guestTeam,
+    player2ActiveIndex: 0,
+    turn: 1,
+    player1MoveName: null,
+    player2MoveName: null,
+    log: [`Room Battle started!`, `Host ${room.hostName} vs Guest ${room.guestName}!`],
+    winnerPhone: null,
+    status: 'active'
+  };
+
+  return res.json({ ok: true, battleId });
+});
+
+// Check room status
+app.post("/api/game/room/status", (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "Missing room code." });
+  const room = customRooms[code];
+  if (!room) {
+    return res.json({ ok: false, error: "Room expired or closed." });
+  }
+  return res.json({ ok: true, room });
+});
+
 app.post("/api/game/heartbeat", (req, res) => {
   const { phone, name, committee } = req.body;
   if (!phone || !name) return res.status(400).json({ error: "Missing identity info." });

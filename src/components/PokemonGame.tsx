@@ -6,6 +6,8 @@ import { PokemonSprite } from './PokemonSprites';
 import { gameAudio } from '../utils/audio';
 import { Battle3DVfx, ActiveVfx } from './Battle3DVfx';
 import { BattleOverModal } from './BattleOverModal';
+import { BattleArena } from './BattleArena';
+import { RotateCw, Smartphone } from 'lucide-react';
 
 const REGION_TABS = [
   { id: 'Kanto', label: 'Gen 1: Kanto' },
@@ -48,6 +50,95 @@ const getTypePillColor = (type: string) => {
   return colors[type] || { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/30' };
 };
 
+const getMoveStyle = (type: string, isBattleAnimating: boolean) => {
+  if (isBattleAnimating) {
+    return {
+      btnClass: 'border-slate-900 bg-slate-950/40 text-slate-500 cursor-not-allowed opacity-55 text-left',
+      nameClass: 'text-slate-500'
+    };
+  }
+
+  const styles: Record<string, { btnClass: string; nameClass: string }> = {
+    Normal: {
+      btnClass: 'border-type-normal/25 bg-type-normal/5 hover:border-type-normal/50 hover:bg-type-normal/10 hover:shadow-[0_0_12px_#A8A77A] text-left transition-all',
+      nameClass: 'text-type-normal'
+    },
+    Fire: {
+      btnClass: 'border-type-fire/25 bg-type-fire/5 hover:border-type-fire/50 hover:bg-type-fire/10 hover:shadow-[0_0_12px_#EE8130] text-left transition-all',
+      nameClass: 'text-type-fire'
+    },
+    Water: {
+      btnClass: 'border-type-water/25 bg-type-water/5 hover:border-type-water/50 hover:bg-type-water/10 hover:shadow-[0_0_12px_#6390F0] text-left transition-all',
+      nameClass: 'text-type-water'
+    },
+    Electric: {
+      btnClass: 'border-type-electric/25 bg-type-electric/5 hover:border-type-electric/50 hover:bg-type-electric/10 hover:shadow-[0_0_12px_#F7D02C] text-left transition-all',
+      nameClass: 'text-type-electric'
+    },
+    Grass: {
+      btnClass: 'border-type-grass/25 bg-type-grass/5 hover:border-type-grass/50 hover:bg-type-grass/10 hover:shadow-[0_0_12px_#7AC74C] text-left transition-all',
+      nameClass: 'text-type-grass'
+    },
+    Ice: {
+      btnClass: 'border-type-ice/25 bg-type-ice/5 hover:border-type-ice/50 hover:bg-type-ice/10 hover:shadow-[0_0_12px_#96D9D6] text-left transition-all',
+      nameClass: 'text-type-ice'
+    },
+    Fighting: {
+      btnClass: 'border-type-fighting/25 bg-type-fighting/5 hover:border-type-fighting/50 hover:bg-type-fighting/10 hover:shadow-[0_0_12px_#C22E28] text-left transition-all',
+      nameClass: 'text-type-fighting'
+    },
+    Poison: {
+      btnClass: 'border-type-poison/25 bg-type-poison/5 hover:border-type-poison/50 hover:bg-type-poison/10 hover:shadow-[0_0_12px_#A33EA1] text-left transition-all',
+      nameClass: 'text-type-poison'
+    },
+    Ground: {
+      btnClass: 'border-type-ground/25 bg-type-ground/5 hover:border-type-ground/50 hover:bg-type-ground/10 hover:shadow-[0_0_12px_#E2BF65] text-left transition-all',
+      nameClass: 'text-type-ground'
+    },
+    Flying: {
+      btnClass: 'border-type-flying/25 bg-type-flying/5 hover:border-type-flying/50 hover:bg-type-flying/10 hover:shadow-[0_0_12px_#A98FF3] text-left transition-all',
+      nameClass: 'text-type-flying'
+    },
+    Psychic: {
+      btnClass: 'border-type-psychic/25 bg-type-psychic/5 hover:border-type-psychic/50 hover:bg-type-psychic/10 hover:shadow-[0_0_12px_#F95587] text-left transition-all',
+      nameClass: 'text-type-psychic'
+    },
+    Bug: {
+      btnClass: 'border-type-bug/25 bg-type-bug/5 hover:border-type-bug/50 hover:bg-type-bug/10 hover:shadow-[0_0_12px_#A6B91A] text-left transition-all',
+      nameClass: 'text-type-bug'
+    },
+    Rock: {
+      btnClass: 'border-type-rock/25 bg-type-rock/5 hover:border-type-rock/50 hover:bg-type-rock/10 hover:shadow-[0_0_12px_#B6A136] text-left transition-all',
+      nameClass: 'text-type-rock'
+    },
+    Ghost: {
+      btnClass: 'border-type-ghost/25 bg-type-ghost/5 hover:border-type-ghost/50 hover:bg-type-ghost/10 hover:shadow-[0_0_12px_#735797] text-left transition-all',
+      nameClass: 'text-type-ghost'
+    },
+    Dragon: {
+      btnClass: 'border-type-dragon/25 bg-type-dragon/5 hover:border-type-dragon/50 hover:bg-type-dragon/10 hover:shadow-[0_0_12px_#6F35FC] text-left transition-all',
+      nameClass: 'text-type-dragon'
+    },
+    Dark: {
+      btnClass: 'border-type-dark/25 bg-type-dark/5 hover:border-type-dark/50 hover:bg-type-dark/10 hover:shadow-[0_0_12px_#705746] text-left transition-all',
+      nameClass: 'text-type-dark'
+    },
+    Steel: {
+      btnClass: 'border-type-steel/25 bg-type-steel/5 hover:border-type-steel/50 hover:bg-type-steel/10 hover:shadow-[0_0_12px_#B7B7CE] text-left transition-all',
+      nameClass: 'text-type-steel'
+    },
+    Fairy: {
+      btnClass: 'border-type-fairy/25 bg-type-fairy/5 hover:border-type-fairy/50 hover:bg-type-fairy/10 hover:shadow-[0_0_12px_#D685AD] text-left transition-all',
+      nameClass: 'text-type-fairy'
+    }
+  };
+
+  return styles[type] || {
+    btnClass: 'border-slate-800 bg-slate-950/80 hover:border-amber-500 hover:bg-slate-900/40 text-left',
+    nameClass: 'text-white'
+  };
+};
+
 interface PokemonGameProps {
   trainerName: string;
   trainerAvatar: string;
@@ -70,12 +161,62 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
   // Game state
   const [gameState, setGameState] = useState<'lobby' | 'teamSelect' | 'battle' | 'gameOver'>('lobby');
-  const [battleMode, setBattleMode] = useState<'campaign' | 'versus'>('campaign');
+  const [battleMode, setBattleMode] = useState<'campaign' | 'versus' | 'online'>('campaign');
+
+  // Online Multiplayer state
+  const [onlinePlayerPhone] = useState<string>(() => {
+    let id = localStorage.getItem('pokemon_trainer_phone');
+    if (!id) {
+      id = "9" + Math.floor(100000000 + Math.random() * 900000000).toString();
+      localStorage.setItem('pokemon_trainer_phone', id);
+    }
+    return id;
+  });
+
+  const [onlineBattleId, setOnlineBattleId] = useState<string | null>(null);
+  const [onlineOpponentPhone, setOnlineOpponentPhone] = useState<string | null>(null);
+  const [onlineOpponentName, setOnlineOpponentName] = useState<string | null>(null);
+  const [isOnlineTurnWaiting, setIsOnlineTurnWaiting] = useState<boolean>(false);
+
+  // Matchmaking status: 'idle' | 'searching' | 'matched' | 'timeout'
+  const [matchmakingStatus, setMatchmakingStatus] = useState<'idle' | 'searching' | 'matched' | 'timeout'>('idle');
+  const [matchmakingTimer, setMatchmakingTimer] = useState<number>(30);
+
+  // Room status: 'idle' | 'hosting' | 'joining'
+  const [roomStatus, setRoomStatus] = useState<'idle' | 'hosting' | 'joining'>('idle');
+  const [roomCode, setRoomCode] = useState<string>('');
+  const [enteredRoomCode, setEnteredRoomCode] = useState<string>('');
+  const [roomError, setRoomError] = useState<string>('');
   
   // Campaign progress (0 to 4 defeated bosses)
   const [campaignProgress, setCampaignProgress] = useState<number>(() => {
     return parseInt(localStorage.getItem('pokemon_campaign_progress') || '0', 10);
   });
+
+  // Selected campaign NPC to challenge (defaults to current unlocked NPC)
+  const [selectedCampaignNpc, setSelectedCampaignNpc] = useState<NpcTrainer>(() => {
+    const currentIdx = Math.min(
+      parseInt(localStorage.getItem('pokemon_campaign_progress') || '0', 10),
+      NPC_TRAINERS.length - 1
+    );
+    return NPC_TRAINERS[currentIdx] || NPC_TRAINERS[0];
+  });
+
+  // Keep selectedCampaignNpc in sync with progress if it unlocks new trainers
+  useEffect(() => {
+    const currentIdx = Math.min(campaignProgress, NPC_TRAINERS.length - 1);
+    if (NPC_TRAINERS[currentIdx]) {
+      setSelectedCampaignNpc(NPC_TRAINERS[currentIdx]);
+    }
+  }, [campaignProgress]);
+
+  // Trim team draft when required size changes
+  useEffect(() => {
+    const requiredSize = selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3;
+    if (selectedPokeIdsP1.length > requiredSize) {
+      setSelectedPokeIdsP1(selectedPokeIdsP1.slice(0, requiredSize));
+    }
+  }, [selectedCampaignNpc]);
 
   // Selected teams for battle
   const [selectedPokeIdsP1, setSelectedPokeIdsP1] = useState<string[]>([]);
@@ -131,6 +272,89 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   const opponentLaneRef = useRef<number>(0);
   const playerAimLaneRef = useRef<number>(0);
   const opponentAimLaneRef = useRef<number>(0);
+
+  // Screen orientation and portrait detection
+  const [isPortrait, setIsPortrait] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+    return () => {
+      window.removeEventListener('resize', checkOrientation);
+      window.removeEventListener('orientationchange', checkOrientation);
+    };
+  }, []);
+
+  const lockLandscape = async () => {
+    // Try requesting fullscreen if mobile to allow orientation lock
+    try {
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        await docEl.requestFullscreen().catch(() => {});
+      } else if ((docEl as any).webkitRequestFullscreen) {
+        await (docEl as any).webkitRequestFullscreen().catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Fullscreen request failed:', err);
+    }
+
+    // Attempt locking screen orientation to landscape
+    try {
+      const orient = window.screen && (window.screen.orientation as any);
+      if (orient && orient.lock) {
+        await orient.lock('landscape').catch(() => {});
+      } else if ((window.screen as any).lockOrientation) {
+        (window.screen as any).lockOrientation('landscape');
+      } else if ((window.screen as any).mozLockOrientation) {
+        (window.screen as any).mozLockOrientation('landscape');
+      } else if ((window.screen as any).msLockOrientation) {
+        (window.screen as any).msLockOrientation('landscape');
+      }
+    } catch (err) {
+      console.warn('Screen orientation lock failed:', err);
+    }
+  };
+
+  const unlockOrientation = async () => {
+    try {
+      const orient = window.screen && (window.screen.orientation as any);
+      if (orient && orient.unlock) {
+        orient.unlock();
+      }
+    } catch (err) {
+      console.warn('Screen orientation unlock failed:', err);
+    }
+
+    try {
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen().catch(() => {});
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen().catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn('Exit fullscreen failed:', err);
+    }
+  };
+
+  // Keep screen orientation state synced with gameState
+  useEffect(() => {
+    if (gameState === 'battle') {
+      lockLandscape();
+    } else {
+      unlockOrientation();
+    }
+    return () => {
+      if (gameState === 'battle') {
+        unlockOrientation();
+      }
+    };
+  }, [gameState]);
 
   useEffect(() => {
     playerLaneRef.current = playerLane;
@@ -250,9 +474,12 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   // Handle Team Selection Toggle (Player 1 or Player 2)
   const handlePokeToggleP1 = (id: string) => {
     gameAudio.playSelect();
+    const requiredSize = battleMode === 'campaign'
+      ? (selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3)
+      : 3;
     if (selectedPokeIdsP1.includes(id)) {
       setSelectedPokeIdsP1(selectedPokeIdsP1.filter(x => x !== id));
-    } else if (selectedPokeIdsP1.length < 3) {
+    } else if (selectedPokeIdsP1.length < requiredSize) {
       setSelectedPokeIdsP1([...selectedPokeIdsP1, id]);
     }
   };
@@ -268,12 +495,15 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
   // Start Campaign Match
   const startCampaignBattle = (npc: NpcTrainer) => {
-    if (selectedPokeIdsP1.length !== 3) {
+    const reqSize = npc.name === "Kartik Kumar" ? 6 : 3;
+    if (selectedPokeIdsP1.length !== reqSize) {
       gameAudio.playFaint();
-      alert("Please select exactly 3 Pokémon for your team first!");
+      setSelectedCampaignNpc(npc);
+      alert(`To challenge ${npc.name}, you must draft exactly ${reqSize} Pokémon on the team selection panel first!`);
       return;
     }
     gameAudio.playSelect();
+    lockLandscape();
     setBattleMode('campaign');
     setActiveNpc(npc);
 
@@ -312,6 +542,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
       return;
     }
     gameAudio.playSelect();
+    lockLandscape();
     const p1Team = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
     const p2Team = POKEMON_ROSTER.filter(p => selectedPokeIdsP2.includes(p.id)).map(p => ({ ...p }));
 
@@ -684,7 +915,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
     // 1. If Opponent's active Pokémon fainted
     if (activeP2.hp <= 0) {
-      if (battleMode === 'campaign') {
+      if (battleMode === 'campaign' && activeNpc?.name !== "Kartik Kumar") {
         // Trainer/Campaign Battle: make the Pokémon faint and immediately give Player 1 the victory screen
         logs.push(`\n🏆 Opponent's ${activeP2.name} fainted! You won the battle!`);
         setGameState('gameOver');
@@ -700,16 +931,25 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
         }
         gameEnded = true;
       } else {
-        // Versus Mode: force another Pokémon of Player 2 to come out
+        // Versus Mode or Kartik Kumar: force another Pokémon of Player 2 / Boss to come out
         const nextOppIdx = opponentTeam.findIndex(p => p.hp > 0);
         if (nextOppIdx !== -1) {
           setActiveOpponentIdx(nextOppIdx);
-          logs.push(`\n🔄 Player 2's ${activeP2.name} fainted! ${opponentTeam[nextOppIdx].name} was forced onto the battlefield!`);
+          logs.push(`\n🔄 ${battleMode === 'campaign' ? "Kartik's" : "Player 2's"} ${activeP2.name} fainted! ${opponentTeam[nextOppIdx].name} was forced onto the battlefield!`);
           setTimeout(() => gameAudio.playHeal(), 300);
         } else {
-          logs.push(`\n🏆 All opposing Pokémon have fainted! Player 1 wins the battle!`);
+          logs.push(`\n🏆 All opposing Pokémon have fainted! ${battleMode === 'campaign' ? 'You won' : 'Player 1 wins'} the battle!`);
           setGameState('gameOver');
           setWinnerName(trainerName);
+          if (battleMode === 'campaign' && activeNpc) {
+            setHasWonCampaignVoucher(true);
+            const currentNpcIdx = NPC_TRAINERS.findIndex(x => x.name === activeNpc.name);
+            if (currentNpcIdx >= campaignProgress) {
+              const nextProgress = currentNpcIdx + 1;
+              setCampaignProgress(nextProgress);
+              localStorage.setItem('pokemon_campaign_progress', String(nextProgress));
+            }
+          }
           gameEnded = true;
         }
       }
@@ -763,6 +1003,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   // Handle rematch with same team selection
   const handleRematch = () => {
     gameAudio.playSelect();
+    lockLandscape();
     
     if (battleMode === 'campaign' && activeNpc) {
       const pTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
@@ -842,12 +1083,330 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
     setBattleLogs(logs);
   };
 
+  // --- ONLINE MULTIPLAYER ENGINE AND POLLING ---
+
+  const updateOnlineBattleState = (battle: any) => {
+    if (!battle) return;
+
+    const isPlayer1 = onlinePlayerPhone === battle.player1Phone;
+    
+    // Map teams
+    const myTeam = isPlayer1 ? battle.player1Team : battle.player2Team;
+    const oppTeam = isPlayer1 ? battle.player2Team : battle.player1Team;
+    
+    const myActiveIdx = isPlayer1 ? battle.player1ActiveIndex : battle.player2ActiveIndex;
+    const oppActiveIdx = isPlayer1 ? battle.player2ActiveIndex : battle.player1ActiveIndex;
+    
+    const myMove = isPlayer1 ? battle.player1MoveName : battle.player2MoveName;
+    
+    if (myTeam) {
+      setPlayerTeam(myTeam);
+      setActivePlayerIdx(myActiveIdx);
+    }
+    
+    if (oppTeam) {
+      setOpponentTeam(oppTeam);
+      setActiveOpponentIdx(oppActiveIdx);
+    }
+    
+    // Set opponent info
+    const oppName = isPlayer1 ? battle.player2Name : battle.player1Name;
+    const oppPhone = isPlayer1 ? battle.player2Phone : battle.player1Phone;
+    setOnlineOpponentName(oppName || "Opponent");
+    setOnlineOpponentPhone(oppPhone || null);
+    
+    // Turn waiting state: we have chosen a move, but opponent hasn't
+    const waiting = myMove !== null;
+    setIsOnlineTurnWaiting(waiting);
+    
+    // Sync logs
+    if (battle.log && battle.log.length > 0) {
+      setBattleLogs(battle.log);
+    }
+    
+    // Game over checks
+    if (battle.status === 'completed' || battle.winnerPhone) {
+      setGameState('gameOver');
+      const won = battle.winnerPhone === onlinePlayerPhone;
+      setWinnerName(won ? trainerName : (oppName || "Opponent"));
+      setHasWonCampaignVoucher(false);
+    }
+  };
+
+  const handleOnlinePlayerSwitch = async (idx: number) => {
+    if (battleMode === 'online' && onlineBattleId) {
+      try {
+        const response = await fetch('/api/game/battle-switch-fainted', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ battleId: onlineBattleId, myPhone: onlinePlayerPhone, nextIndex: idx })
+        });
+        const data = await response.json();
+        if (data.ok) {
+          updateOnlineBattleState(data.battle);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      handlePlayerSwitch(idx);
+    }
+  };
+
+  const handleStartMatchmaking = async () => {
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
+    if (curSelectedTeam.length !== 3) {
+      alert("Please draft exactly 3 Pokémon before starting matchmaking!");
+      return;
+    }
+    
+    gameAudio.playSelect();
+    setMatchmakingStatus('searching');
+    setMatchmakingTimer(30);
+    setPlayerTeam(curSelectedTeam);
+    
+    try {
+      const response = await fetch('/api/game/matchmake/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: onlinePlayerPhone,
+          name: trainerName,
+          team: curSelectedTeam
+        })
+      });
+      const data = await response.json();
+      if (data.ok && data.matched) {
+        setMatchmakingStatus('matched');
+        setOnlineBattleId(data.battleId);
+        setOnlineOpponentName(data.opponentName);
+        setBattleMode('online');
+        setGameState('battle');
+        gameAudio.playHeal();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCancelMatchmaking = async (isTimeout = false) => {
+    gameAudio.playFaint();
+    setMatchmakingStatus(isTimeout ? 'timeout' : 'idle');
+    try {
+      await fetch('/api/game/matchmake/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: onlinePlayerPhone })
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreateRoom = async () => {
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
+    if (curSelectedTeam.length !== 3) {
+      alert("Please draft exactly 3 Pokémon before creating a room!");
+      return;
+    }
+    
+    gameAudio.playSelect();
+    setRoomError('');
+    setPlayerTeam(curSelectedTeam);
+    
+    try {
+      const response = await fetch('/api/game/room/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: onlinePlayerPhone,
+          name: trainerName,
+          team: curSelectedTeam
+        })
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setRoomCode(data.code);
+        setRoomStatus('hosting');
+      } else {
+        setRoomError(data.error || 'Failed to create room.');
+      }
+    } catch (e) {
+      console.error(e);
+      setRoomError('Server error creating room.');
+    }
+  };
+
+  const handleJoinRoom = async () => {
+    const code = enteredRoomCode.trim();
+    if (!code) {
+      setRoomError("Please enter a room code!");
+      return;
+    }
+    
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
+    if (curSelectedTeam.length !== 3) {
+      alert("Please draft exactly 3 Pokémon before joining a room!");
+      return;
+    }
+    
+    gameAudio.playSelect();
+    setRoomError('');
+    setPlayerTeam(curSelectedTeam);
+    
+    try {
+      const response = await fetch('/api/game/room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          phone: onlinePlayerPhone,
+          name: trainerName,
+          team: curSelectedTeam
+        })
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setOnlineBattleId(data.battleId);
+        setBattleMode('online');
+        setGameState('battle');
+        gameAudio.playHeal();
+      } else {
+        setRoomError(data.error || 'Failed to join room.');
+        gameAudio.playFaint();
+      }
+    } catch (e) {
+      console.error(e);
+      setRoomError('Server error joining room.');
+      gameAudio.playFaint();
+    }
+  };
+
+  // Polling loop for active matchmaking
+  useEffect(() => {
+    if (matchmakingStatus !== 'searching') return;
+
+    let countdownInterval = setInterval(() => {
+      setMatchmakingTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          handleCancelMatchmaking(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    let pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/game/matchmake/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: onlinePlayerPhone })
+        });
+        const data = await response.json();
+        if (data.ok) {
+          if (data.matched) {
+            clearInterval(countdownInterval);
+            clearInterval(pollInterval);
+            setMatchmakingStatus('matched');
+            setOnlineBattleId(data.battleId);
+            setOnlineOpponentName(data.opponentName);
+            setBattleMode('online');
+            setGameState('battle');
+            gameAudio.playHeal();
+          } else if (data.timeout) {
+            clearInterval(countdownInterval);
+            clearInterval(pollInterval);
+            setMatchmakingStatus('timeout');
+            gameAudio.playFaint();
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 1500);
+
+    return () => {
+      clearInterval(countdownInterval);
+      clearInterval(pollInterval);
+    };
+  }, [matchmakingStatus, onlinePlayerPhone]);
+
+  // Polling loop for room guest joining
+  useEffect(() => {
+    if (roomStatus !== 'hosting' || !roomCode) return;
+
+    let active = true;
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/game/room/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: roomCode })
+        });
+        if (!active) return;
+        const data = await response.json();
+        if (data.ok && data.room) {
+          if (data.room.battleId) {
+            clearInterval(pollInterval);
+            setRoomStatus('idle');
+            setOnlineBattleId(data.room.battleId);
+            setOnlineOpponentName(data.room.guestName || "Guest");
+            setBattleMode('online');
+            setGameState('battle');
+            gameAudio.playHeal();
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [roomStatus, roomCode]);
+
+  // Polling loop for active online battle state
+  useEffect(() => {
+    if (gameState !== 'battle' || battleMode !== 'online' || !onlineBattleId) return;
+
+    let active = true;
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/game/battle-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            battleId: onlineBattleId,
+            myPhone: onlinePlayerPhone,
+            myTeam: playerTeam
+          })
+        });
+        if (!active) return;
+        const data = await response.json();
+        if (data.ok && data.battle) {
+          updateOnlineBattleState(data.battle);
+        }
+      } catch (e) {
+        console.error("Error polling battle state:", e);
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [gameState, battleMode, onlineBattleId, onlinePlayerPhone]);
+
   // HP progress color mapping
   const hpProgressColor = (hp: number, max: number) => {
     const ratio = hp / max;
-    if (ratio > 0.5) return 'bg-emerald-500';
-    if (ratio > 0.2) return 'bg-amber-500';
-    return 'bg-rose-500 animate-pulse';
+    if (ratio >= 0.5) return 'bg-green-500';
+    if (ratio >= 0.2) return 'bg-yellow-400';
+    return 'bg-red-500 animate-pulse';
   };
 
   // Synthetic live piano keyboard parameters
@@ -913,10 +1472,10 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                     : 'border-slate-800/80 bg-slate-950/40 hover:border-slate-700'
                 }`}
               >
-                <div className={`font-cinzel text-xs font-bold ${active ? 'text-amber-500' : 'text-slate-200'}`}>
+                <div className={`font-pressstart text-[8px] leading-normal tracking-tight ${active ? 'text-[#ffcc00] drop-shadow-[0_1px_0_rgba(59,76,202,0.8)] font-bold' : 'text-slate-200'}`}>
                   {t.label}
                 </div>
-                <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                <div className="text-[10px] font-mono text-slate-400 mt-1">
                   {t.desc}
                 </div>
               </button>
@@ -936,11 +1495,11 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
               {/* Draft Configuration Panel */}
               <div className="lg:col-span-5 bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 flex flex-col justify-between">
                 <div>
-                  <h3 className="font-cinzel font-bold text-lg text-amber-500 flex items-center gap-1.5 border-b border-slate-900 pb-3 mb-4">
-                    <span>Draft Your 3-Pokémon Team</span>
+                  <h3 className="pokemon-logo-text-sm text-sm flex items-center gap-1.5 border-b border-slate-900 pb-3 mb-4">
+                    <span>Draft Your {selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3}-Pokémon Team</span>
                   </h3>
                   <p className="text-xs text-slate-400 font-mono mb-4 leading-relaxed">
-                    Choose exactly 3 elements to participate in the championship against School Bosses.
+                    Choose exactly {selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3} elements to participate in the championship against {selectedCampaignNpc?.name || 'School Bosses'}.
                   </p>
 
                   {/* Generation/Region Tab Selectors */}
@@ -1016,10 +1575,12 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                   <div className="mt-4 bg-slate-900/30 border border-slate-800/60 p-3 rounded-xl">
                     <div className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-2 flex justify-between">
                       <span>Drafted Team Squad</span>
-                      <span className="text-amber-500">{selectedPokeIdsP1.length} / 3</span>
+                      <span className="text-amber-500">
+                        {selectedPokeIdsP1.length} / {selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[0, 1, 2].map(idx => {
+                    <div className={`grid ${selectedCampaignNpc?.name === "Kartik Kumar" ? "grid-cols-6" : "grid-cols-3"} gap-2`}>
+                      {Array.from({ length: selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3 }).map((_, idx) => {
                         const targetId = selectedPokeIdsP1[idx];
                         const poke = POKEMON_ROSTER.find(x => x.id === targetId);
                         return (
@@ -1027,7 +1588,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             {poke ? (
                               <>
                                 <PokemonSprite name={poke.name} dexNumber={poke.dexNumber} className="w-8 h-8 object-contain" />
-                                <span className="text-[9px] text-white font-medium truncate max-w-full mt-1">{poke.name}</span>
+                                <span className="text-[8px] text-white font-medium truncate max-w-full mt-1">{poke.name}</span>
                               </>
                             ) : (
                               <span className="text-[9px] text-slate-600 font-mono">Empty</span>
@@ -1040,9 +1601,11 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-900 flex justify-between items-center text-xs text-slate-400 font-mono">
-                  <span>Selected: {selectedPokeIdsP1.length} / 3</span>
-                  {selectedPokeIdsP1.length !== 3 && (
-                    <span className="text-amber-500/80 animate-pulse">Select 3 to challenge bosses!</span>
+                  <span>Selected: {selectedPokeIdsP1.length} / {selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3}</span>
+                  {selectedPokeIdsP1.length !== (selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3) && (
+                    <span className="text-amber-500/80 animate-pulse">
+                      Select {selectedCampaignNpc?.name === "Kartik Kumar" ? 6 : 3} to challenge {selectedCampaignNpc?.name}!
+                    </span>
                   )}
                 </div>
               </div>
@@ -1050,14 +1613,14 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
               {/* Boss Challenge Cards List */}
               <div className="lg:col-span-7 flex flex-col gap-4">
                 <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5">
-                  <h3 className="font-cinzel font-bold text-lg text-slate-100 flex items-center gap-2 border-b border-slate-900 pb-3 mb-4">
+                  <h3 className="pokemon-logo-text-sm text-sm flex items-center gap-2 border-b border-slate-900 pb-3 mb-4">
                     <span>School Champion Campaign</span>
                     <span className="text-xs bg-slate-900 text-amber-500 border border-amber-500/20 rounded px-2 py-0.5 font-mono">
                       Step-by-Step Challenge
                     </span>
                   </h3>
 
-                  {campaignProgress >= 4 && (
+                  {campaignProgress >= 5 && (
                     <div className="bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-amber-500/20 border-2 border-amber-500/40 rounded-xl p-4 text-center mb-4 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
                       <span className="text-3xl">🏆</span>
                       <h4 className="font-bold text-white mt-1">SPSMUN Champion Cup Mastered!</h4>
@@ -1074,16 +1637,27 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                     {NPC_TRAINERS.map((npc, idx) => {
                       const isUnlocked = idx <= campaignProgress;
                       const isBeaten = idx < campaignProgress;
+                      const isSelected = selectedCampaignNpc?.name === npc.name;
+                      const reqSize = npc.name === "Kartik Kumar" ? 6 : 3;
+                      const isDraftComplete = selectedPokeIdsP1.length === reqSize;
                       
                       return (
                         <div
                           key={npc.name}
-                          className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 rounded-xl border transition-all ${
-                            isBeaten
-                              ? 'border-emerald-500/20 bg-emerald-950/5'
+                          onClick={() => {
+                            if (isUnlocked) {
+                              gameAudio.playSelect();
+                              setSelectedCampaignNpc(npc);
+                            }
+                          }}
+                          className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-4 rounded-xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-amber-500 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.15)]'
+                              : isBeaten
+                              ? 'border-emerald-500/20 bg-emerald-950/5 hover:border-slate-800'
                               : isUnlocked
-                              ? 'border-slate-800 bg-slate-900/30'
-                              : 'border-slate-950 bg-slate-950/20 opacity-40'
+                              ? 'border-slate-800 bg-slate-900/30 hover:border-slate-750'
+                              : 'border-slate-950 bg-slate-950/20 opacity-40 pointer-events-none'
                           }`}
                         >
                           <div className="flex items-start sm:items-center gap-3.5">
@@ -1098,6 +1672,9 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                                 {isUnlocked && !isBeaten && (
                                   <span className="text-amber-500 text-[10px] font-mono animate-pulse">Active Challenger</span>
                                 )}
+                                {isSelected && (
+                                  <span className="text-[9px] bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded font-mono font-bold uppercase">Targeted</span>
+                                )}
                               </div>
                               <div className="text-xs text-amber-500/80 font-mono mt-0.5">{npc.role}</div>
                               <p className="text-xs text-slate-400 font-mono mt-1.5 italic">"{npc.intro}"</p>
@@ -1105,9 +1682,12 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                           </div>
 
                           <button
-                            disabled={!isUnlocked || selectedPokeIdsP1.length !== 3}
-                            onClick={() => startCampaignBattle(npc)}
-                            className={`btn sm ${isUnlocked && selectedPokeIdsP1.length === 3 ? 'pulse-btn' : ''}`}
+                            disabled={!isUnlocked || !isDraftComplete}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startCampaignBattle(npc);
+                            }}
+                            className={`btn sm ${isUnlocked && isDraftComplete ? 'pulse-btn' : ''}`}
                             style={{ minWidth: '100px' }}
                           >
                             {isBeaten ? 'Re-Battle' : 'Battle'}
@@ -1124,19 +1704,327 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
           {/* 2. VERSUS TAB */}
           {activeTab === 'versus' && (
-            <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-6 text-center max-w-xl mx-auto">
-              <span className="text-4xl">⚔️</span>
-              <h3 className="font-cinzel font-bold text-xl text-amber-500 mt-2">Local Versus Mode (Pass & Play)</h3>
-              <p className="text-xs text-slate-400 font-mono mt-1 mb-6 max-w-sm mx-auto">
-                No server needed! Draft teams on the same device and take turns choosing secret attacks.
-              </p>
+            <div className="space-y-6">
+              {/* Header Visualizer */}
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-2 border-slate-900/80 rounded-2xl p-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-sky-500/5 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+                  <div>
+                    <span className="text-[9px] uppercase font-pressstart tracking-widest text-amber-500 font-bold block mb-1">
+                      VERSUS TRAINING SECTOR
+                    </span>
+                    <h2 className="pokemon-logo-text text-xl sm:text-2xl font-black tracking-widest leading-none mt-1">
+                      BATTLE CHAMPIONS
+                    </h2>
+                    <p className="text-xs text-slate-400 font-mono mt-1.5 max-w-md">
+                      Test your tactical prowess locally or connect with trainers across the globe in 3v3 combat.
+                    </p>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-center md:text-right">
+                    <div className="text-[8px] font-mono text-slate-500 uppercase">Your Trainer ID</div>
+                    <div className="text-xs font-mono text-amber-400 font-bold mt-0.5">#{onlinePlayerPhone}</div>
+                  </div>
+                </div>
+              </div>
 
-              <button
-                onClick={enterVersusDraft}
-                className="btn w-full py-3 text-sm flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
-              >
-                <span>ENTER DRAFT CHAMBER</span>
-              </button>
+              {/* Main Dual Grid: Local Versus vs Online Multiplayer */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT SIDE: Team Draft & Local Mode */}
+                <div className="lg:col-span-7 space-y-6">
+                  
+                  {/* Local Mode Launcher */}
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 hover:border-slate-800 transition-all">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-200 font-mono flex items-center gap-2">
+                          <span className="text-lg">👥</span> Local Pass & Play Match
+                        </h3>
+                        <p className="text-[11px] text-slate-400 font-mono mt-1 max-w-md">
+                          Draft teams on the same device and take turns choosing secret attacks.
+                        </p>
+                      </div>
+                      <button
+                        onClick={enterVersusDraft}
+                        id="btn-versus-draft"
+                        className="btn sm w-full sm:w-auto py-2 px-4 text-[10px] font-mono tracking-wider text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl font-bold uppercase transition-all whitespace-nowrap active:scale-95 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                      >
+                        Enter Local Arena
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Team Draft Selection */}
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5">
+                    <div className="border-b border-slate-900 pb-3 mb-4 flex justify-between items-center flex-wrap gap-2">
+                      <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300">
+                        1. Choose 3-Pokémon Squad
+                      </h3>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${selectedPokeIdsP1.length === 3 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                        {selectedPokeIdsP1.length === 3 ? 'Ready' : `${selectedPokeIdsP1.length}/3 Chosen`}
+                      </span>
+                    </div>
+
+                    {/* Region Selector */}
+                    <div className="flex gap-1 overflow-x-auto pb-2 mb-3.5 scrollbar-none border-b border-slate-900/50">
+                      {REGION_TABS.map(tab => {
+                        const isActive = draftP1Region === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              gameAudio.playSelect();
+                              setDraftP1Region(tab.id);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-[9px] font-mono uppercase tracking-wider border transition-all whitespace-nowrap ${
+                              isActive
+                                ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 font-bold'
+                                : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                            }`}
+                          >
+                            {tab.id}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pokémon Selection Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[310px] overflow-y-auto pr-1 scrollbar-thin">
+                      {POKEMON_ROSTER.filter(p => p.region === draftP1Region).map(p => {
+                        const isSelected = selectedPokeIdsP1.includes(p.id);
+                        const selectIdx = selectedPokeIdsP1.indexOf(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handlePokeToggleP1(p.id)}
+                            className={`text-left p-2 rounded-xl border text-[11px] transition-all relative overflow-hidden flex flex-col justify-between h-[105px] ${
+                              isSelected
+                                ? 'border-amber-500 bg-amber-500/10'
+                                : 'border-slate-900 bg-slate-950/60 hover:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start w-full gap-1">
+                              <span className="font-bold text-slate-200 truncate pr-4">{p.name}</span>
+                              {isSelected && (
+                                <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-bold font-mono flex items-center justify-center">
+                                  {selectIdx + 1}
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-10 h-10 my-1 self-center flex items-center justify-center bg-slate-950/40 rounded-lg overflow-hidden border border-slate-900">
+                              <img 
+                                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.dexNumber}.png`}
+                                alt={p.name}
+                                className="w-full h-full object-contain"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.dexNumber}.png`;
+                                }}
+                              />
+                            </div>
+                            <div className="flex gap-1 flex-wrap mt-0.5">
+                              {p.type.map(t => {
+                                const style = getTypePillColor(t);
+                                return (
+                                  <span key={t} className={`text-[7px] font-mono px-1 py-0.2 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                    {t}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Active Selected Squad display */}
+                    <div className="mt-4 bg-slate-950/40 border border-slate-900 p-3 rounded-xl space-y-2">
+                      <div className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">
+                        Current Team Composition
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[0, 1, 2].map(idx => {
+                          const targetId = selectedPokeIdsP1[idx];
+                          const poke = POKEMON_ROSTER.find(x => x.id === targetId);
+                          return (
+                            <div key={idx} className="flex flex-col items-center justify-center p-2 rounded-lg border border-dashed border-slate-850 bg-slate-950/60 min-h-[70px]">
+                              {poke ? (
+                                <>
+                                  <PokemonSprite name={poke.name} dexNumber={poke.dexNumber} className="w-8 h-8 object-contain" />
+                                  <span className="text-[9px] text-slate-300 font-bold truncate max-w-full mt-1">{poke.name}</span>
+                                </>
+                              ) : (
+                                <span className="text-[8px] text-slate-600 font-mono">Empty</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT SIDE: Online Multiplayer Arena */}
+                <div className="lg:col-span-5 space-y-6">
+                  
+                  {/* Mode Selector Panel */}
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 space-y-5">
+                    <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300 border-b border-slate-900 pb-3">
+                      2. Online Versus Arena
+                    </h3>
+
+                    {/* MATCHMAKING SECTION */}
+                    <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-3">
+                      <h4 className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
+                        🌍 Online Matchmaking
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                        Find a random online challenger instantly. Matchmaking will find a partner in less than 30 seconds.
+                      </p>
+
+                      {matchmakingStatus === 'idle' && (
+                        <button
+                          onClick={handleStartMatchmaking}
+                          disabled={selectedPokeIdsP1.length !== 3}
+                          className={`w-full py-3 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all flex items-center justify-center gap-2 ${
+                            selectedPokeIdsP1.length === 3
+                              ? 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 hover:shadow-[0_0_20px_rgba(56,189,248,0.25)] active:scale-95'
+                              : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                          }`}
+                        >
+                          ⚡ START MATCHMAKING
+                        </button>
+                      )}
+
+                      {matchmakingStatus === 'searching' && (
+                        <div className="space-y-2 border border-sky-500/20 bg-sky-500/5 rounded-xl p-3 text-center animate-pulse">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+                            <span className="text-[10px] font-mono font-bold text-sky-400">CONNECTING TO LOBBY SERVER...</span>
+                          </div>
+                          <div className="text-xl font-mono text-white font-bold">{matchmakingTimer}s</div>
+                          <p className="text-[10px] text-slate-400 font-mono">Looking for an active trainer...</p>
+                          <button
+                            onClick={() => handleCancelMatchmaking(false)}
+                            className="text-[9px] text-rose-400 hover:text-rose-300 font-mono uppercase underline tracking-wider mt-1 block mx-auto"
+                          >
+                            Cancel Search
+                          </button>
+                        </div>
+                      )}
+
+                      {matchmakingStatus === 'timeout' && (
+                        <div className="space-y-2 border border-rose-500/20 bg-rose-500/5 rounded-xl p-3 text-center">
+                          <div className="text-[10px] font-mono font-bold text-rose-400 uppercase">⌛ MATCHMAKING TIMEOUT</div>
+                          <p className="text-[10px] text-slate-400 font-mono">No active challenger was found in the queue. Open another tab or try again!</p>
+                          <button
+                            onClick={handleStartMatchmaking}
+                            className="text-[10px] text-sky-400 hover:text-sky-300 font-mono uppercase underline tracking-wider block mx-auto"
+                          >
+                            Retry Matchmaking
+                          </button>
+                        </div>
+                      )}
+
+                      {matchmakingStatus === 'matched' && (
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-center rounded-xl p-3 text-[10px] font-mono font-bold uppercase animate-bounce">
+                          🎯 Challenger Found! Teleporting to Arena...
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CUSTOM BATTLE ROOMS SECTION */}
+                    <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
+                      <h4 className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
+                        🔑 Custom Battle Room
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                        Create a room to get a code, share it with a friend, and battle instantly.
+                      </p>
+
+                      {roomError && (
+                        <div className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-xl p-2">
+                          ⚠️ {roomError}
+                        </div>
+                      )}
+
+                      {roomStatus === 'idle' && (
+                        <div className="grid grid-cols-1 gap-3">
+                          {/* Create Room Option */}
+                          <button
+                            onClick={handleCreateRoom}
+                            disabled={selectedPokeIdsP1.length !== 3}
+                            className={`w-full py-2.5 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all ${
+                              selectedPokeIdsP1.length === 3
+                                ? 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700 active:scale-95'
+                                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                            }`}
+                          >
+                            ➕ Create New Room
+                          </button>
+
+                          <div className="relative flex py-1 items-center">
+                            <div className="flex-grow border-t border-slate-900" />
+                            <span className="flex-shrink mx-3 text-[9px] font-mono text-slate-500 uppercase">OR JOIN ROOM</span>
+                            <div className="flex-grow border-t border-slate-900" />
+                          </div>
+
+                          {/* Join Room Inputs */}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={enteredRoomCode}
+                              onChange={(e) => setEnteredRoomCode(e.target.value.toUpperCase())}
+                              placeholder="CODE"
+                              maxLength={6}
+                              className="w-1/3 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-center text-xs font-mono font-bold tracking-widest text-amber-400 focus:outline-none focus:border-amber-500"
+                            />
+                            <button
+                              onClick={handleJoinRoom}
+                              disabled={selectedPokeIdsP1.length !== 3}
+                              className={`flex-1 py-2 px-4 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all ${
+                                selectedPokeIdsP1.length === 3
+                                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95'
+                                  : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                              }`}
+                            >
+                              Join Match
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {roomStatus === 'hosting' && (
+                        <div className="space-y-3 border border-amber-500/20 bg-amber-500/5 rounded-xl p-3.5 text-center">
+                          <div className="text-[10px] font-mono text-slate-400">ROOM CREATED SUCCESSFULLY!</div>
+                          <div className="text-2xl font-mono text-amber-400 font-black tracking-widest bg-slate-950 border border-slate-800 py-1.5 rounded-lg">
+                            {roomCode}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono">
+                            Share this code with your friend. The battle starts automatically once they join!
+                          </p>
+                          <button
+                            onClick={() => {
+                              setRoomStatus('idle');
+                              setRoomCode('');
+                            }}
+                            className="text-[9px] text-rose-400 hover:text-rose-300 font-mono uppercase underline tracking-wider block mx-auto"
+                          >
+                            Close Room
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
             </div>
           )}
 
@@ -1146,7 +2034,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
               
               {/* Dex list */}
               <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5">
-                <h3 className="font-cinzel font-bold text-base text-amber-500 border-b border-slate-900 pb-3 mb-4">
+                <h3 className="pokemon-logo-text-sm text-sm border-b border-slate-900 pb-3 mb-4">
                   Pokémon Registry
                 </h3>
 
@@ -1220,7 +2108,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                     <PokemonSprite name={selectedPokedexPoke.name} dexNumber={selectedPokedexPoke.dexNumber} className="w-20 h-20 sm:w-28 sm:h-28" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-cinzel font-bold text-lg text-white">{selectedPokedexPoke.name}</h4>
+                    <h4 className="pokemon-logo-text-sm text-sm">{selectedPokedexPoke.name}</h4>
                     <div className="flex gap-1.5 mt-1 flex-wrap">
                       {selectedPokedexPoke.type.map(t => {
                         const style = getTypePillColor(t);
@@ -1258,8 +2146,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
                 {/* Interactive calculator */}
                 <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5">
-                  <h4 className="font-cinzel font-bold text-sm text-slate-100 mb-3 pb-2 border-b border-slate-900">
-                    Interactive Type Advantage Calculator
+                  <h4 className="pokemon-logo-text-sm text-xs mb-3 pb-2 border-b border-slate-900">
+                    Type Advantage Calculator
                   </h4>
                   
                   <div className="grid grid-cols-2 gap-3 mb-4">
@@ -1315,7 +2203,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           {activeTab === 'synth' && (
             <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 max-w-xl mx-auto flex flex-col gap-5">
               <div>
-                <h3 className="font-cinzel font-bold text-lg text-amber-500 border-b border-slate-900 pb-3 mb-2">
+                <h3 className="pokemon-logo-text-sm text-sm border-b border-slate-900 pb-3 mb-2">
                   Retro Soundboard & Synthesizer
                 </h3>
                 <p className="text-xs text-slate-400 font-mono leading-relaxed">
@@ -1377,7 +2265,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
       {gameState === 'teamSelect' && (
         <div className="animate-fade bg-slate-950 border-2 border-slate-900 rounded-3xl p-6 flex flex-col gap-6">
           <div className="text-center border-b border-slate-900 pb-4">
-            <h3 className="font-cinzel font-bold text-xl text-amber-500">Draft Chamber (2-Player Local)</h3>
+            <h3 className="pokemon-logo-text-sm text-base">Draft Chamber (2-Player Local)</h3>
             <p className="text-xs text-slate-400 font-mono mt-0.5">Choose exactly 3 Pokémon per player to initialize combat.</p>
           </div>
 
@@ -1386,7 +2274,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
             {/* Player 1 Draft Card */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
               <div>
-                <h4 className="font-cinzel text-sm font-bold text-white mb-2 border-b border-slate-800 pb-2">
+                <h4 className="pokemon-logo-text-sm text-xs mb-2 border-b border-slate-800 pb-2">
                   🔴 Player 1 (Red)
                 </h4>
 
@@ -1486,7 +2374,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
             {/* Player 2 Draft Card */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
               <div>
-                <h4 className="font-cinzel text-sm font-bold text-white mb-2 border-b border-slate-800 pb-2">
+                <h4 className="pokemon-logo-text-sm text-xs mb-2 border-b border-slate-800 pb-2">
                   🔮 Player 2 (Challenger)
                 </h4>
 
@@ -1605,10 +2493,74 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
       {/* ACTIVE COMBAT GROUND (BATTLE SCREEN) */}
       {(gameState === 'battle' || gameState === 'gameOver') && playerTeam.length > 0 && opponentTeam.length > 0 && (
-        <div className="animate-fade flex flex-col gap-4">
+        battleMode === 'online' ? (
+          <div className="relative w-full">
+            <BattleArena
+              battleMode="online"
+              playerTeam={playerTeam}
+              opponentTeam={opponentTeam}
+              activePlayerIdx={activePlayerIdx}
+              activeOpponentIdx={activeOpponentIdx}
+              onPlayerSwitch={handleOnlinePlayerSwitch}
+              onOpponentSwitch={() => {}}
+              onMoveResolved={() => {}}
+              battleId={onlineBattleId}
+              onlinePlayerPhone={onlinePlayerPhone}
+              isOnlineTurnWaiting={isOnlineTurnWaiting}
+              setOnlineTurnWaiting={setIsOnlineTurnWaiting}
+              onBattleFinished={(winner, won) => {
+                setGameState('gameOver');
+                setWinnerName(winner);
+                gameAudio.playHeal();
+              }}
+            />
+
+            {/* Responsive Victory/Defeat Overlay Modal */}
+            <BattleOverModal
+              isOpen={gameState === 'gameOver'}
+              winnerName={winnerName}
+              trainerName={trainerName}
+              battleMode={battleMode}
+              playerTeam={playerTeam}
+              opponentTeam={opponentTeam}
+              activeNpc={activeNpc}
+              hasWonCampaignVoucher={hasWonCampaignVoucher}
+              onRematch={handleRematch}
+              onReturnToSelection={handleReturnToSelection}
+            />
+          </div>
+        ) : (
+          <div className="animate-fade grid grid-cols-1 landscape:grid-cols-10 md:grid-cols-10 gap-2 sm:gap-4 relative">
           
+          {/* Portrait Rotation Overlay helper */}
+          {isPortrait && (
+            <div className="fixed inset-0 bg-slate-950/95 z-50 flex flex-col items-center justify-center p-6 text-center animate-fade pointer-events-auto">
+              <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+                <motion.div
+                  animate={{ rotate: [0, 90, 90, 0] }}
+                  transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                >
+                  <RotateCw className="w-10 h-10 text-amber-400" />
+                </motion.div>
+              </div>
+              <h3 className="font-cinzel text-xl font-bold text-white mb-2">Rotate Your Device</h3>
+              <p className="text-xs text-slate-400 max-w-xs leading-relaxed mb-6 font-mono">
+                The battle arena is optimized for horizontal view. Please turn your phone to landscape mode.
+              </p>
+              <button
+                onClick={() => {
+                  gameAudio.playSelect();
+                  lockLandscape();
+                }}
+                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl font-mono text-xs font-bold uppercase tracking-wider shadow-lg transition-all"
+              >
+                Request Landscape Lock
+              </button>
+            </div>
+          )}
+
           {/* Main 3D isometric styled screen area */}
-          <div className="relative h-[380px] sm:h-[460px] rounded-3xl overflow-hidden bg-slate-950 border-2 border-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.8)]">
+          <div className="relative h-[180px] xs:h-[240px] sm:h-[320px] md:h-[380px] lg:h-[460px] rounded-3xl overflow-hidden bg-slate-950 border-2 border-slate-900 shadow-[0_10px_35px_rgba(0,0,0,0.8)] col-span-1 landscape:col-span-7 md:col-span-7 row-auto landscape:row-start-1 md:row-start-1">
             {/* Ambient visual background glow details */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(30,41,59,0.35)_0%,transparent_100%)] pointer-events-none" />
             <div className="absolute top-10 left-10 w-32 h-32 rounded-full bg-amber-500/[0.04] blur-xl" />
@@ -1711,26 +2663,28 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
             {activeVfx && <Battle3DVfx vfx={activeVfx} />}
 
             {/* OPPONENT SIDE HUD (Top Left) */}
-            <div className="absolute top-4 left-4 sm:top-6 sm:left-6 bg-slate-950/90 border border-slate-800/80 rounded-2xl p-3 w-[180px] sm:w-[220px] shadow-[0_4px_15px_rgba(0,0,0,0.5)] z-20">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-white text-sm sm:text-base font-cinzel">
+            <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-20 pointer-events-none select-none text-left drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="font-pressstart text-[8px] sm:text-[10px] text-[#ffcc00] drop-shadow-[0_1px_0_rgba(59,76,202,0.85)] tracking-tight leading-none">
                   {opponentTeam[activeOpponentIdx].name}
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">Lv.50</span>
+                <span className="text-[9px] text-slate-300 font-mono font-medium">Lv.50</span>
+                {opponentTeam[activeOpponentIdx].status !== 'None' && (
+                  <span className="text-[9px] text-amber-400 font-mono font-bold bg-amber-500/20 px-1 rounded">
+                    {opponentTeam[activeOpponentIdx].status}
+                  </span>
+                )}
               </div>
-              {/* HP percentage bar */}
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1 border border-black/20">
-                <div
-                  className={`h-full transition-all duration-300 ${hpProgressColor(opponentTeam[activeOpponentIdx].hp, opponentTeam[activeOpponentIdx].maxHp)}`}
-                  style={{ width: `${(opponentTeam[activeOpponentIdx].hp / opponentTeam[activeOpponentIdx].maxHp) * 100}%` }}
-                />
-              </div>
-              <div className="flex justify-between items-center text-[10px] font-mono">
-                <span className={opponentTeam[activeOpponentIdx].status !== 'None' ? 'text-amber-400' : 'text-slate-500'}>
-                  {opponentTeam[activeOpponentIdx].status !== 'None' ? opponentTeam[activeOpponentIdx].status : 'Healthy'}
-                </span>
-                <span className="text-slate-300">
-                  {opponentTeam[activeOpponentIdx].hp} / {opponentTeam[activeOpponentIdx].maxHp} HP
+              {/* HP percentage bar and percentage label on the side */}
+              <div className="flex items-center gap-2 w-[120px] sm:w-[150px]">
+                <div className="flex-1 bg-slate-900/60 h-1.5 rounded-full overflow-hidden border border-black/40">
+                  <div
+                    className={`h-full transition-all duration-300 ${hpProgressColor(opponentTeam[activeOpponentIdx].hp, opponentTeam[activeOpponentIdx].maxHp)}`}
+                    style={{ width: `${(opponentTeam[activeOpponentIdx].hp / opponentTeam[activeOpponentIdx].maxHp) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[9px] font-mono text-white font-semibold">
+                  {Math.round((opponentTeam[activeOpponentIdx].hp / opponentTeam[activeOpponentIdx].maxHp) * 100)}%
                 </span>
               </div>
             </div>
@@ -1820,26 +2774,28 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
             </div>
 
             {/* PLAYER 1 HUD (Bottom Right) */}
-            <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 bg-slate-950/90 border border-slate-800/80 rounded-2xl p-3 w-[180px] sm:w-[220px] shadow-[0_4px_15px_rgba(0,0,0,0.5)] z-20">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-white text-sm sm:text-base font-cinzel">
+            <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-20 pointer-events-none select-none text-right flex flex-col items-end drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {playerTeam[activePlayerIdx].status !== 'None' && (
+                  <span className="text-[9px] text-amber-400 font-mono font-bold bg-amber-500/20 px-1 rounded">
+                    {playerTeam[activePlayerIdx].status}
+                  </span>
+                )}
+                <span className="font-pressstart text-[8px] sm:text-[10px] text-[#ffcc00] drop-shadow-[0_1px_0_rgba(59,76,202,0.85)] tracking-tight leading-none">
                   {playerTeam[activePlayerIdx].name}
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">Lv.50</span>
+                <span className="text-[9px] text-slate-300 font-mono font-medium">Lv.50</span>
               </div>
-              {/* HP percentage bar */}
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-1 border border-black/20">
-                <div
-                  className={`h-full transition-all duration-300 ${hpProgressColor(playerTeam[activePlayerIdx].hp, playerTeam[activePlayerIdx].maxHp)}`}
-                  style={{ width: `${(playerTeam[activePlayerIdx].hp / playerTeam[activePlayerIdx].maxHp) * 100}%` }}
-                />
-              </div>
-              <div className="flex justify-between items-center text-[10px] font-mono">
-                <span className={playerTeam[activePlayerIdx].status !== 'None' ? 'text-amber-400' : 'text-slate-500'}>
-                  {playerTeam[activePlayerIdx].status !== 'None' ? playerTeam[activePlayerIdx].status : 'Healthy'}
-                </span>
-                <span className="text-slate-300">
-                  {playerTeam[activePlayerIdx].hp} / {playerTeam[activePlayerIdx].maxHp} HP
+              {/* HP percentage bar and percentage label on the side */}
+              <div className="flex items-center gap-2 w-[120px] sm:w-[150px]">
+                <div className="flex-1 bg-slate-900/60 h-1.5 rounded-full overflow-hidden border border-black/40">
+                  <div
+                    className={`h-full transition-all duration-300 ${hpProgressColor(playerTeam[activePlayerIdx].hp, playerTeam[activePlayerIdx].maxHp)}`}
+                    style={{ width: `${(playerTeam[activePlayerIdx].hp / playerTeam[activePlayerIdx].maxHp) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[9px] font-mono text-white font-semibold">
+                  {Math.round((playerTeam[activePlayerIdx].hp / playerTeam[activePlayerIdx].maxHp) * 100)}%
                 </span>
               </div>
             </div>
@@ -1849,14 +2805,14 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           </div>
 
           {/* 2. THE MOVESETS PART */}
-          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-1.5 xs:p-3 sm:p-4 flex flex-col justify-between shadow-[0_4px_20px_rgba(0,0,0,0.4)] col-span-1 landscape:col-span-3 md:col-span-3 row-auto landscape:row-start-1 md:row-start-1">
             <div>
-              <label className="block text-[10px] font-mono text-amber-500 uppercase tracking-widest mb-3 pb-1 border-b border-slate-800">
+              <label className="block text-[7px] xs:text-[8px] font-pressstart text-[#ffcc00] drop-shadow-[0_1px_0_rgba(59,76,202,0.8)] uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-800">
                 {isBattleAnimating
-                  ? '⏳ BATTLE RESOLVING... (FROZEN)'
+                  ? '⏳ BATTLE RESOLVING...'
                   : battleMode === 'campaign'
-                  ? 'CHOOSE CAMPAIGN ATTACK'
-                  : `CHOOSE MOVE: ${pvpTurnState === 'p1_select' ? 'Player 1' : 'Player 2'}`}
+                  ? 'CHOOSE ATTACK'
+                  : `MOVE: ${pvpTurnState === 'p1_select' ? 'PLAYER 1' : 'PLAYER 2'}`}
               </label>
 
               {/* Turn transitions for local Versus */}
@@ -1879,12 +2835,12 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                   {!((battleMode === 'campaign' && playerTeam[activePlayerIdx].hp <= 0) ||
                      (battleMode === 'versus' && pvpTurnState === 'p1_select' && playerTeam[activePlayerIdx].hp <= 0) ||
                      (battleMode === 'versus' && pvpTurnState === 'p2_select' && opponentTeam[activeOpponentIdx].hp <= 0)) && (
-                    <div className="bg-slate-950/90 border border-slate-800/80 rounded-xl p-3 mb-3 animate-fade-in flex flex-col gap-3">
+                    <div className="bg-slate-950/90 border border-slate-800/80 rounded-xl p-1.5 xs:p-3 mb-1.5 xs:mb-3 animate-fade-in flex flex-col gap-1.5 xs:gap-3">
                       {/* Aim Direction Selection */}
                       <div>
-                        <div className="flex justify-between items-center mb-1.5">
-                          <span className="text-[10px] font-mono font-bold text-slate-400 tracking-wider uppercase">
-                            🎯 SELECT ATTACK TARGET DIRECTION
+                        <div className="flex flex-col xs:flex-row xs:justify-between xs:items-center mb-1">
+                          <span className="text-[8px] xs:text-[10px] font-mono font-bold text-slate-400 tracking-wider uppercase">
+                            🎯 TARGET DIRECTION
                           </span>
                           <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full uppercase">
                             {((battleMode === 'campaign' || pvpTurnState === 'p1_select') ? playerAimLane : opponentAimLane) === -1 ? 'LEFT TRACK' :
@@ -1925,13 +2881,13 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                       </div>
 
                       {/* Integrated Positioning / Dodge Controls */}
-                      <div className="border-t border-slate-900 pt-3">
-                        <div className="flex justify-between items-center mb-1.5">
+                      <div className="border-t border-slate-900 pt-1.5 xs:pt-3">
+                        <div className="flex flex-col xs:flex-row xs:justify-between xs:items-center mb-1">
                           <div className="flex flex-col">
-                            <span className="text-[10px] font-mono font-bold text-amber-500 tracking-wider uppercase">
-                              🛡️ FIELD POSITION (DODGE)
+                            <span className="text-[8px] xs:text-[10px] font-mono font-bold text-amber-500 tracking-wider uppercase">
+                              🛡️ DODGE POSITION
                             </span>
-                            <span className="text-[8px] text-slate-500 font-mono">
+                            <span className="hidden xs:inline text-[8px] text-slate-500 font-mono">
                               {(battleMode === 'campaign' || pvpTurnState === 'p1_select') ? 'Control P1 with A/D or ARROWS' : 'Control P2 with ARROWS'}
                             </span>
                           </div>
@@ -1965,7 +2921,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             title="Move Left"
                           >
                             <span className="text-xs">◀</span>
-                            <span className="text-[8px] font-mono font-semibold">MOVE LEFT</span>
+                            <span className="text-[7px] font-mono font-semibold">LEFT</span>
                           </button>
 
                           {/* Quick Snap to Center Button */}
@@ -1988,7 +2944,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             title="Center Position"
                           >
                             <span className="text-xs">●</span>
-                            <span className="text-[8px] font-mono font-semibold">CENTER</span>
+                            <span className="text-[7px] font-mono font-semibold">MID</span>
                           </button>
 
                           {/* Move Right Button */}
@@ -2015,7 +2971,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             title="Move Right"
                           >
                             <span className="text-xs">▶</span>
-                            <span className="text-[8px] font-mono font-semibold">MOVE RIGHT</span>
+                            <span className="text-[7px] font-mono font-semibold">RIGHT</span>
                           </button>
                         </div>
                       </div>
@@ -2035,30 +2991,31 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                       (battleMode === 'campaign' || pvpTurnState === 'p1_select'
                         ? playerTeam[activePlayerIdx]
                         : opponentTeam[activeOpponentIdx]
-                      ).moves.map(m => (
-                        <button
-                          key={m.name}
-                          disabled={isBattleAnimating}
-                          onClick={() => {
-                            if (battleMode === 'campaign') {
-                              resolveCampaignTurn(m);
-                            } else {
-                              submitVersusMove(m);
-                            }
-                          }}
-                          className={`flex flex-col items-start p-2.5 rounded-xl border transition-all text-left ${
-                            isBattleAnimating
-                              ? 'border-slate-900 bg-slate-950/40 text-slate-500 cursor-not-allowed opacity-55'
-                              : 'border-slate-800 bg-slate-950/80 hover:border-amber-500 hover:bg-slate-900/40'
-                          }`}
-                        >
-                          <span className={`text-xs font-bold leading-tight ${isBattleAnimating ? 'text-slate-500' : 'text-white'}`}>{m.name}</span>
-                          <div className="flex justify-between w-full mt-1.5 text-[9px] font-mono text-slate-500 leading-none">
-                            <span>Power: {m.power}</span>
-                            <span>Acc: {m.accuracy}%</span>
-                          </div>
-                        </button>
-                      ))
+                      ).moves.map(m => {
+                        const style = getMoveStyle(m.type, isBattleAnimating);
+                        return (
+                          <button
+                            key={m.name}
+                            disabled={isBattleAnimating}
+                            onClick={() => {
+                              if (battleMode === 'campaign') {
+                                resolveCampaignTurn(m);
+                              } else {
+                                submitVersusMove(m);
+                              }
+                            }}
+                            className={`flex flex-col items-start p-1.5 xs:p-2.5 rounded-xl border transition-all text-left ${style.btnClass}`}
+                          >
+                            <span className={`text-[10px] xs:text-xs font-bold leading-tight ${style.nameClass}`}>
+                              {m.name}
+                            </span>
+                            <div className="flex justify-between w-full mt-1 xs:mt-1.5 text-[8px] xs:text-[9px] font-mono text-slate-500 leading-none">
+                              <span>Pwr: {m.power}</span>
+                              <span>Acc: {m.accuracy}%</span>
+                            </div>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -2067,8 +3024,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           </div>
 
           {/* 3. THE POKÉMON PART */}
-          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-            <label className="block text-[10px] font-mono text-amber-500 uppercase tracking-widest mb-3 pb-1 border-b border-slate-800">
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-1.5 xs:p-3 sm:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.4)] col-span-1 landscape:col-span-7 md:col-span-7 row-auto landscape:row-start-2 md:row-start-2">
+            <label className="block text-[8px] xs:text-[10px] font-mono text-amber-500 uppercase tracking-widest mb-1.5 xs:mb-3 pb-1 border-b border-slate-800">
               SWITCH ACTIVE SQUAD
             </label>
 
@@ -2149,15 +3106,15 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           {/* 4. THE RECORDER AT THE LAST */}
           <div 
             ref={logContainerRef}
-            className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-4 h-28 overflow-y-auto font-mono text-[11px] sm:text-xs flex flex-col gap-1.5 shadow-inner scroll-smooth"
+            className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-2 h-28 overflow-y-auto font-vt323 text-xs xs:text-sm sm:text-base md:text-[17px] tracking-wide flex flex-col gap-1 shadow-inner scroll-smooth col-span-1 landscape:col-span-3 md:col-span-3 row-auto landscape:row-start-2 md:row-start-2 border-l-4 border-l-[#3b4cca]"
           >
             {battleLogs.map((log, i) => (
               <div
                 key={i}
                 className={
-                  log.startsWith('---') ? 'text-amber-500 font-bold' :
+                  log.startsWith('---') ? 'text-[#ffcc00] font-bold drop-shadow-[0_1px_0_rgba(0,0,0,0.8)]' :
                   log.includes('fainted') || log.includes('lost') ? 'text-rose-400 font-bold' :
-                  log.includes('won') || log.includes('victory') ? 'text-emerald-400 font-bold' : 'text-slate-300'
+                  log.includes('won') || log.includes('victory') ? 'text-emerald-400 font-bold' : 'text-slate-200'
                 }
               >
                 {log}
@@ -2166,7 +3123,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           </div>
 
           {/* Quick exit match action */}
-          <div className="flex justify-center mt-2">
+          <div className="flex justify-center mt-2 col-span-1 landscape:col-span-7 md:col-span-7 row-auto landscape:row-start-3 md:row-start-3">
             <button
               onClick={() => {
                 gameAudio.playFaint();
@@ -2195,6 +3152,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           />
 
         </div>
+        )
       )}
 
     </div>
