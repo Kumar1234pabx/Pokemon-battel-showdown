@@ -270,12 +270,25 @@ export const PokemonSprite: React.FC<SpriteProps & { name: string; dexNumber?: n
   status = 'None',
   className = ''
 }) => {
-  const [imgState, setImgState] = useState<'loading' | 'gif' | 'homeArtwork' | 'svgFallback'>('loading');
+  const [urlIndex, setUrlIndex] = useState<number>(0);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   // Reset image state when name or perspective changes to reload correct visual mode
   useEffect(() => {
-    setImgState('loading');
+    setUrlIndex(0);
+    setIsLoaded(false);
   }, [name, isBack]);
+
+  // Resilient fallback timers: if an asset takes more than 2.2 seconds to load, try the next option
+  useEffect(() => {
+    if (!isLoaded && urlIndex < 3) {
+      const timer = setTimeout(() => {
+        console.warn(`[PokemonSprite] Load timed out for ${name} at urlIndex ${urlIndex}. Trying next fallback.`);
+        setUrlIndex(prev => prev + 1);
+      }, 2200);
+      return () => clearTimeout(timer);
+    }
+  }, [urlIndex, isLoaded, name]);
 
   let meta = POKEMON_META[name];
   if (!meta) {
@@ -296,6 +309,12 @@ export const PokemonSprite: React.FC<SpriteProps & { name: string; dexNumber?: n
 
   // Fallback 1: High Quality 3D Render from PokeAPI (Pokemon Home models)
   const homeArtworkUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/home/${meta.id}.png`;
+
+  // Fallback 2: Ultra lightweight classic PokeAPI static sprite (tiny size, extremely fast loading)
+  const staticSpriteUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${meta.id}.png`;
+
+  // Determine current image URL
+  const currentSrc = urlIndex === 0 ? gifUrl : urlIndex === 1 ? homeArtworkUrl : staticSpriteUrl;
 
   // Attacking Animations: Player active Pokémon lunges up-right, opponent active Pokémon lunges down-left
   const attackClass = isAttacking
@@ -335,46 +354,52 @@ export const PokemonSprite: React.FC<SpriteProps & { name: string; dexNumber?: n
       }`} />
 
       {/* Loading micro-spinner */}
-      {imgState === 'loading' && (
+      {!isLoaded && urlIndex < 3 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-5 h-5 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
         </div>
       )}
 
       {/* Render Image Assets sequentially with secure error boundary */}
-      {imgState !== 'svgFallback' && (
+      {urlIndex < 3 && (
         <img
-          src={imgState === 'gif' || imgState === 'loading' ? gifUrl : homeArtworkUrl}
+          src={currentSrc}
           alt={name}
           referrerPolicy="no-referrer"
           className={`object-contain w-full h-full transition-all duration-300 ${
-            imgState === 'loading' ? 'opacity-0 scale-75' : 'opacity-100 scale-100'
+            !isLoaded ? 'opacity-0 scale-75' : 'opacity-100 scale-100'
           }`}
           style={{ filter: statusFilter() }}
           onLoad={() => {
-            if (imgState === 'loading') {
-              setImgState('gif');
-            }
+            setIsLoaded(true);
           }}
           onError={() => {
-            if (imgState === 'loading' || imgState === 'gif') {
-              setImgState('homeArtwork'); // Try PokeAPI 3D render next
-            } else {
-              setImgState('svgFallback'); // Ultimate offline vector backup
-            }
+            console.error(`[PokemonSprite] Failed to load sprite for ${name} at urlIndex ${urlIndex}`);
+            setIsLoaded(false);
+            setUrlIndex(prev => prev + 1);
           }}
         />
       )}
 
-      {/* Render standard vector fallbacks if client is offline */}
-      {imgState === 'svgFallback' && (
-        <div className="w-full h-full max-h-full max-w-full">
+      {/* Render standard vector fallbacks if client is offline or images fail */}
+      {urlIndex >= 3 && (
+        <div className="w-full h-full max-h-full max-w-full flex items-center justify-center">
           {name === 'Pikachu' && <PikachuSprite isBack={isBack} isAttacking={false} isHit={false} status={status} className="w-full h-full" />}
           {name === 'Charizard' && <CharizardSprite isBack={isBack} isAttacking={false} isHit={false} status={status} className="w-full h-full" />}
           {name === 'Blastoise' && <BlastoiseSprite isBack={isBack} isAttacking={false} isHit={false} status={status} className="w-full h-full" />}
           {name === 'Mewtwo' && <MewtwoSprite isBack={isBack} isAttacking={false} isHit={false} status={status} className="w-full h-full" />}
           {name === 'Lucario' && <LucarioSprite isBack={isBack} isAttacking={false} isHit={false} status={status} className="w-full h-full" />}
           {name === 'Gengar' && <GengarSprite isBack={isBack} isAttacking={false} isHit={false} status={status} className="w-full h-full" />}
+          {!['Pikachu', 'Charizard', 'Blastoise', 'Mewtwo', 'Lucario', 'Gengar'].includes(name) && (
+            <div className="w-16 h-16 sm:w-20 sm:h-20 flex flex-col items-center justify-center bg-slate-950/80 rounded-full border border-slate-700/50 p-2 text-center select-none shadow-2xl">
+              <span className="text-sm sm:text-base font-extrabold text-amber-500 tracking-wider uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                {name.substring(0, 2)}
+              </span>
+              <span className="text-[8px] sm:text-[9px] font-mono font-bold text-slate-400 mt-0.5 max-w-[64px] truncate leading-none">
+                {name}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

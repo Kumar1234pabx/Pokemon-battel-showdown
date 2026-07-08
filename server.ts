@@ -4,8 +4,12 @@ import { createServer as createViteServer } from 'vite';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const pathFilename = typeof __filename !== 'undefined'
+  ? __filename
+  : (import.meta && import.meta.url ? fileURLToPath(import.meta.url) : '');
+const pathDirname = typeof __dirname !== 'undefined'
+  ? __dirname
+  : path.dirname(pathFilename);
 
 const app = express();
 const PORT = 3000;
@@ -86,6 +90,42 @@ let gameLeaderboard: Record<string, { wins: number; losses: number; name: string
   "9999988888": { wins: 3, losses: 0, name: "Tobi Madara", committee: "AIPPM" }
 };
 
+let battleHistory: any[] = [];
+let sheetsConfig = {
+  spreadsheetId: "",
+  spreadsheetUrl: "",
+  accessToken: "",
+  tokenExpiry: 0,
+  adminEmail: "",
+  lastSynced: ""
+};
+
+// Database persistence file setup
+const DB_FILE = path.join(pathDirname, 'battle_records_db.json');
+try {
+  if (fs.existsSync(DB_FILE)) {
+    const raw = fs.readFileSync(DB_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed.gameLeaderboard) gameLeaderboard = parsed.gameLeaderboard;
+    if (parsed.battleHistory) battleHistory = parsed.battleHistory;
+    if (parsed.sheetsConfig) sheetsConfig = parsed.sheetsConfig;
+    console.log("[Persistence] Loaded game records and sheets config successfully.");
+  } else {
+    console.log("[Persistence] No existing record DB found. Initializing fresh.");
+  }
+} catch (err) {
+  console.error("[Persistence] Error loading database file:", err);
+}
+
+function savePersistence() {
+  try {
+    const data = { gameLeaderboard, battleHistory, sheetsConfig };
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error("[Persistence] Error saving database file:", err);
+  }
+}
+
 let matchmakingQueue: { phone: string; name: string; team: any[]; joinedAt: number }[] = [];
 let matchedBattles: Record<string, { battleId: string; opponentName: string }> = {};
 let customRooms: Record<string, {
@@ -104,7 +144,7 @@ let customRooms: Record<string, {
 setInterval(() => {
   const now = Date.now();
   for (const phone in onlinePlayers) {
-    if (now - onlinePlayers[phone].lastSeen > 8000) {
+    if (now - onlinePlayers[phone].lastSeen > 15000) {
       delete onlinePlayers[phone];
     }
   }
@@ -494,7 +534,7 @@ app.post("/api/game/heartbeat", (req, res) => {
 });
 
 app.post("/api/game/challenge", (req, res) => {
-  const { fromPhone, fromName, toPhone } = req.body;
+  const { fromPhone, fromName, toPhone, fromTeam } = req.body;
   if (!fromPhone || !toPhone) return res.status(400).json({ error: "Missing challenge info." });
   
   // Clear past invites between these players
@@ -505,6 +545,7 @@ app.post("/api/game/challenge", (req, res) => {
     fromPhone,
     fromName,
     toPhone,
+    fromTeam: fromTeam || null,
     status: 'pending'
   };
   battleInvites.push(newInvite);
@@ -530,7 +571,7 @@ app.post("/api/game/accept-invite", (req, res) => {
     id: battleId,
     player1Phone: invite.fromPhone,
     player1Name: invite.fromName,
-    player1Team: null, // to be populated when player 1 fetches
+    player1Team: invite.fromTeam || null, // Immediately populate from invite!
     player1ActiveIndex: 0,
     player2Phone: invite.toPhone,
     player2Name: onlinePlayers[invite.toPhone]?.name || "Challenger",
@@ -568,14 +609,18 @@ app.post("/api/game/battle-state", (req, res) => {
 });
 
 app.post("/api/game/battle-submit-move", (req, res) => {
-  const { battleId, myPhone, moveName } = req.body;
+  const { battleId, myPhone, moveName, aimLane, dodgeLane } = req.body;
   const battle = activeBattles[battleId];
   if (!battle) return res.status(404).json({ error: "Battle not found." });
 
   if (myPhone === battle.player1Phone) {
     battle.player1MoveName = moveName;
+    battle.player1AimLane = aimLane !== undefined ? aimLane : 0;
+    battle.player1DodgeLane = dodgeLane !== undefined ? dodgeLane : 0;
   } else if (myPhone === battle.player2Phone) {
     battle.player2MoveName = moveName;
+    battle.player2AimLane = aimLane !== undefined ? aimLane : 0;
+    battle.player2DodgeLane = dodgeLane !== undefined ? dodgeLane : 0;
   }
 
   // Turn Resolution: if BOTH have selected a move, resolve!
@@ -592,14 +637,14 @@ app.post("/api/game/battle-switch-fainted", (req, res) => {
   if (!battle) return res.status(404).json({ error: "Battle not found." });
 
   if (myPhone === battle.player1Phone) {
-    const pk = battle.player1Team[battle.player1ActiveIndex];
-    if (pk.hp <= 0) {
+    const targetPk = battle.player1Team[nextIndex];
+    if (targetPk && targetPk.hp > 0) {
       battle.player1ActiveIndex = nextIndex;
       battle.log.push(`${battle.player1Name} sent out ${battle.player1Team[nextIndex].name}!`);
     }
   } else if (myPhone === battle.player2Phone) {
-    const pk = battle.player2Team[battle.player2ActiveIndex];
-    if (pk.hp <= 0) {
+    const targetPk = battle.player2Team[nextIndex];
+    if (targetPk && targetPk.hp > 0) {
       battle.player2ActiveIndex = nextIndex;
       battle.log.push(`${battle.player2Name} sent out ${battle.player2Team[nextIndex].name}!`);
     }
@@ -617,6 +662,21 @@ function resolveTurn(battle: any) {
   const m2 = p2.moves.find((m: any) => m.name === battle.player2MoveName);
 
   if (!m1 || !m2) return;
+
+  // Save the state *before* this turn resolves so that clients can animate sequentially from these initial values!
+  battle.lastTurnResolved = {
+    turn: battle.turn,
+    player1MoveName: battle.player1MoveName,
+    player2MoveName: battle.player2MoveName,
+    player1AimLane: battle.player1AimLane !== undefined ? battle.player1AimLane : 0,
+    player2AimLane: battle.player2AimLane !== undefined ? battle.player2AimLane : 0,
+    player1DodgeLane: battle.player1DodgeLane !== undefined ? battle.player1DodgeLane : 0,
+    player2DodgeLane: battle.player2DodgeLane !== undefined ? battle.player2DodgeLane : 0,
+    p1InitialHp: battle.player1Team.map((p: any) => p.hp),
+    p1InitialStatus: battle.player1Team.map((p: any) => p.status),
+    p2InitialHp: battle.player2Team.map((p: any) => p.hp),
+    p2InitialStatus: battle.player2Team.map((p: any) => p.status)
+  };
 
   // Decide who goes first based on Speed (higher goes first)
   const p1First = p1.speed >= p2.speed;
@@ -641,12 +701,28 @@ function resolveTurn(battle: any) {
       continue;
     }
 
-    battle.log.push(`${act.name}'s ${act.poke.name} used ${act.move.name}!`);
+    battle.log.push(`${act.isP1 ? "Your" : "Opponent's"} ${act.poke.name} used ${act.move.name}!`);
 
-    if (act.move.category === 'Status' && act.move.effect === 'heal') {
+    const isHeal = act.move.category === 'Status' && act.move.effect === 'heal';
+
+    if (isHeal) {
       const amt = Math.floor(act.poke.maxHp * 0.5);
       act.poke.hp = Math.min(act.poke.maxHp, act.poke.hp + amt);
       battle.log.push(`${act.poke.name} recovered ${amt} HP!`);
+      continue;
+    }
+
+    // Lane Dodging Logic:
+    // If Player 1 is attacking, we check if Player 1's aim matches Player 2's dodge lane
+    // If Player 2 is attacking, we check if Player 2's aim matches Player 1's dodge lane
+    const attackerAimLane = act.isP1 ? battle.player1AimLane : battle.player2AimLane;
+    const defenderDodgeLane = act.isP1 ? battle.player2DodgeLane : battle.player1DodgeLane;
+    const isDodged = attackerAimLane !== defenderDodgeLane;
+
+    if (isDodged) {
+      const aimDirectionName = attackerAimLane === -1 ? 'Left' : attackerAimLane === 1 ? 'Right' : 'Middle';
+      const targetLaneName = defenderDodgeLane === -1 ? 'Left' : defenderDodgeLane === 1 ? 'Right' : 'Middle';
+      battle.log.push(`💨 ${act.opponent.name} dodged the attack! (Aimed: ${aimDirectionName} vs actual position: ${targetLaneName})`);
       continue;
     }
 
@@ -671,6 +747,14 @@ function resolveTurn(battle: any) {
     if (mult === 0) battle.log.push(`It doesn't affect ${act.opponent.name}...`);
 
     battle.log.push(`Dealt ${damage} damage to ${act.opponent.name}.`);
+
+    // Draining move healing (e.g. Giga Drain)
+    const isDrainMove = act.move.category !== 'Status' && act.move.effect === 'heal';
+    if (isDrainMove) {
+      const healAmt = Math.floor(damage * 0.5);
+      act.poke.hp = Math.min(act.poke.maxHp, act.poke.hp + healAmt);
+      battle.log.push(`${act.poke.name} absorbed nutrients and recovered ${healAmt} HP!`);
+    }
 
     // Handle status infliction
     if (act.move.effect && act.opponent.hp > 0 && act.opponent.status === 'None') {
@@ -706,14 +790,17 @@ function resolveTurn(battle: any) {
     battle.status = 'completed';
     if (p1Dead && p2Dead) {
       battle.log.push("The battle ended in a draw!");
+      recordBattleFinished(battle, 'draw');
     } else if (p1Dead) {
       battle.winnerPhone = battle.player2Phone;
       battle.log.push(`${battle.player2Name} wins the battle! Congratulations!`);
       recordWin(battle.player2Phone, battle.player2Name, battle.player1Phone);
+      recordBattleFinished(battle, 'p2_win');
     } else {
       battle.winnerPhone = battle.player1Phone;
       battle.log.push(`${battle.player1Name} wins the battle! Congratulations!`);
       recordWin(battle.player1Phone, battle.player1Name, battle.player2Phone);
+      recordBattleFinished(battle, 'p1_win');
     }
   }
 
@@ -738,23 +825,416 @@ function recordWin(winPhone: string, winName: string, losePhone: string) {
     gameLeaderboard[losePhone] = { wins: 0, losses: 0, name: d2.name || "Trainer", committee: d2.committee || "MUN" };
   }
   gameLeaderboard[losePhone].losses++;
+  savePersistence();
 }
 
-// Fetch Leaderboard API
-app.get("/api/game/leaderboard", (req, res) => {
+// Coupon Reward calculation helper
+function getCouponReward(gamesCount: number): string {
+  if (gamesCount >= 5) return "POKE_GOLD_50 (50% Off)";
+  if (gamesCount >= 3) return "POKE_SILVER_20 (20% Off)";
+  if (gamesCount >= 1) return "POKE_BRONZE_10 (10% Off)";
+  return "None (Play 1+ battles today!)";
+}
+
+// Get enriched leaderboard with ranks, today's played matches, and eligible coupons
+function getEnrichedLeaderboard() {
+  const currentDay = detectDay();
+  
   const sorted = Object.keys(gameLeaderboard)
-    .map(phone => ({
-      phone,
-      ...gameLeaderboard[phone]
-    }))
+    .map(phone => {
+      const basic = gameLeaderboard[phone];
+      
+      // Calculate games played today (Day 1, 2, or 3)
+      const playedToday = battleHistory.filter(b => 
+        b.day === currentDay && 
+        (b.player1Phone === phone || b.player2Phone === phone)
+      ).length;
+
+      return {
+        phone,
+        name: basic.name,
+        committee: basic.committee,
+        wins: basic.wins,
+        losses: basic.losses,
+        playedToday,
+        couponCode: getCouponReward(playedToday)
+      };
+    })
     .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
 
-  const ranked = sorted.map((item, index) => ({
+  return sorted;
+}
+
+// Google Sheets Sync Helpers
+async function syncBattleToGoogleSheets(record: any, token: string, spreadsheetId: string): Promise<boolean> {
+  try {
+    const range = 'Battle Records!A:L';
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`;
+    
+    const row = [
+      record.id,
+      record.timestamp,
+      `Day ${record.day}`,
+      record.player1Phone,
+      record.player1Name,
+      record.player1Committee,
+      record.player2Phone,
+      record.player2Name,
+      record.player2Committee,
+      record.winnerPhone,
+      record.winnerName,
+      record.result
+    ];
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        values: [row]
+      })
+    });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[Sheets Sync] Append failed:", errText);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[Sheets Sync] Exception in syncBattleToGoogleSheets:", err);
+    return false;
+  }
+}
+
+async function syncLeaderboardToGoogleSheets(leaderboardData: any[], token: string, spreadsheetId: string): Promise<boolean> {
+  try {
+    // Clear existing values in Leaderboard sheet to avoid leftovers
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Leaderboard!A1:G1000:clear`;
+    await fetch(clearUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    const range = 'Leaderboard!A1';
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+    
+    const rows = [
+      ["Trainer Phone", "Trainer Name", "Committee", "Total Wins", "Total Losses", "Games Played Today", "Eligible Coupon Reward"]
+    ];
+
+    leaderboardData.forEach(item => {
+      rows.push([
+        item.phone,
+        item.name,
+        item.committee,
+        item.wins.toString(),
+        item.losses.toString(),
+        item.playedToday.toString(),
+        item.couponCode
+      ]);
+    });
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        values: rows
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[Sheets Sync] Leaderboard write failed:", errText);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[Sheets Sync] Exception in syncLeaderboardToGoogleSheets:", err);
+    return false;
+  }
+}
+
+// Record Battle Finished and push update to Google Sheets
+function recordBattleFinished(battle: any, result: string) {
+  const day = detectDay();
+  const d1 = delegates.find(x => x.phone === battle.player1Phone) || {};
+  const d2 = delegates.find(x => x.phone === battle.player2Phone) || {};
+
+  const record = {
+    id: battle.battleId || `battle_${Date.now()}`,
+    timestamp: new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+    day: day,
+    player1Phone: battle.player1Phone,
+    player1Name: battle.player1Name,
+    player1Committee: d1.committee || "MUN",
+    player2Phone: battle.player2Phone,
+    player2Name: battle.player2Name,
+    player2Committee: d2.committee || "MUN",
+    winnerPhone: battle.winnerPhone || "Draw",
+    winnerName: battle.winnerPhone ? (battle.winnerPhone === battle.player1Phone ? battle.player1Name : battle.player2Name) : "Draw",
+    result: result === 'draw' ? 'Draw' : (result === 'p1_win' ? `${battle.player1Name} Won` : `${battle.player2Name} Won`),
+    synced: false
+  };
+
+  battleHistory.push(record);
+  savePersistence();
+
+  // Non-blocking auto-sync if credentials exist
+  if (sheetsConfig.spreadsheetId && sheetsConfig.accessToken && sheetsConfig.tokenExpiry > Date.now()) {
+    syncBattleToGoogleSheets(record, sheetsConfig.accessToken, sheetsConfig.spreadsheetId).then(success => {
+      if (success) {
+        record.synced = true;
+        savePersistence();
+        // Trigger non-blocking leaderboard sync
+        const enriched = getEnrichedLeaderboard();
+        syncLeaderboardToGoogleSheets(enriched, sheetsConfig.accessToken, sheetsConfig.spreadsheetId);
+      }
+    });
+  }
+}
+
+// Fetch Leaderboard API (Modified to be highly dynamic & detailed)
+app.get("/api/game/leaderboard", (req, res) => {
+  const enriched = getEnrichedLeaderboard();
+  const ranked = enriched.map((item, index) => ({
     ...item,
     rank: index + 1
   }));
 
   return res.json({ ok: true, leaderboard: ranked });
+});
+
+// Fetch Single Trainer Statistics, Battles and Coupons
+app.get("/api/game/trainer-records", (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: "Phone number required" });
+
+  const phoneStr = phone.toString();
+  const d = delegates.find(x => x.phone === phoneStr) || {};
+  const stats = gameLeaderboard[phoneStr] || { wins: 0, losses: 0, name: d.name || "Trainer", committee: d.committee || "MUN" };
+  
+  // Get trainer battles history
+  const history = battleHistory.filter(b => b.player1Phone === phoneStr || b.player2Phone === phoneStr);
+  const currentDay = detectDay();
+  const playedToday = history.filter(b => b.day === currentDay).length;
+
+  return res.json({
+    ok: true,
+    stats: {
+      phone: phoneStr,
+      name: stats.name,
+      committee: stats.committee,
+      wins: stats.wins,
+      losses: stats.losses,
+      playedToday,
+      couponCode: getCouponReward(playedToday)
+    },
+    history
+  });
+});
+
+// Google Sheets API Endpoints
+app.get("/api/sheets/config", (req, res) => {
+  const isAuthorized = !!(sheetsConfig.accessToken && sheetsConfig.tokenExpiry > Date.now());
+  return res.json({
+    ok: true,
+    spreadsheetId: sheetsConfig.spreadsheetId,
+    spreadsheetUrl: sheetsConfig.spreadsheetUrl,
+    isLinked: !!sheetsConfig.spreadsheetId,
+    isAuthorized,
+    adminEmail: sheetsConfig.adminEmail,
+    lastSynced: sheetsConfig.lastSynced,
+    pendingSyncCount: battleHistory.filter(b => !b.synced).length,
+    totalBattles: battleHistory.length,
+    history: battleHistory.slice().reverse() // Show latest first
+  });
+});
+
+app.post("/api/sheets/setup", async (req, res) => {
+  const { accessToken, spreadsheetId, email } = req.body;
+  if (!accessToken) return res.status(400).json({ error: "Access token required" });
+
+  sheetsConfig.accessToken = accessToken;
+  sheetsConfig.tokenExpiry = Date.now() + 3500000; // ~58 minutes
+  if (email) sheetsConfig.adminEmail = email;
+
+  try {
+    let sheetId = spreadsheetId;
+    let sheetUrl = "";
+
+    if (!sheetId) {
+      // Create a brand new spreadsheet
+      console.log("[Sheets API] Creating brand-new Battle Records spreadsheet...");
+      const response = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          properties: {
+            title: "SPSMUN 2026 - Pokémon Battle Records"
+          },
+          sheets: [
+            { properties: { title: "Battle Records" } },
+            { properties: { title: "Leaderboard" } }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("[Sheets API] Create failed:", errText);
+        return res.status(500).json({ error: `Failed to create Google Sheet: ${errText}` });
+      }
+
+      const data = await response.json();
+      sheetId = data.spreadsheetId;
+      sheetUrl = data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${sheetId}`;
+    } else {
+      // Use existing spreadsheet ID and verify permissions
+      const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!response.ok) {
+        return res.status(400).json({ error: "Spreadsheet ID is invalid or inaccessible with this Google account." });
+      }
+      sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}`;
+
+      // Create worksheets inside existing sheet
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          requests: [
+            { addSheet: { properties: { title: "Battle Records" } } },
+            { addSheet: { properties: { title: "Leaderboard" } } }
+          ]
+        })
+      }).catch(err => {
+        // Safe catch: worksheet probably already exists
+      });
+    }
+
+    // Update config
+    sheetsConfig.spreadsheetId = sheetId;
+    sheetsConfig.spreadsheetUrl = sheetUrl;
+    sheetsConfig.lastSynced = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    savePersistence();
+
+    // Setup sheet headers
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent('Battle Records!A1:L1')}?valueInputOption=USER_ENTERED`, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        values: [[
+          "Battle ID", "Timestamp", "Day", "Trainer 1 Phone", "Trainer 1 Name", "Trainer 1 Committee",
+          "Trainer 2 Phone", "Trainer 2 Name", "Trainer 2 Committee", "Winner Phone", "Winner Name", "Result"
+        ]]
+      })
+    });
+
+    // Write any pending records
+    let syncedCount = 0;
+    for (const b of battleHistory) {
+      if (!b.synced) {
+        const success = await syncBattleToGoogleSheets(b, accessToken, sheetId);
+        if (success) {
+          b.synced = true;
+          syncedCount++;
+        }
+      }
+    }
+
+    // Overwrite leaderboard sheet
+    const enriched = getEnrichedLeaderboard();
+    await syncLeaderboardToGoogleSheets(enriched, accessToken, sheetId);
+
+    savePersistence();
+
+    return res.json({
+      ok: true,
+      spreadsheetId: sheetId,
+      spreadsheetUrl: sheetUrl,
+      syncedCount,
+      totalBattles: battleHistory.length
+    });
+
+  } catch (err: any) {
+    console.error("[Sheets API] Setup failed:", err);
+    return res.status(500).json({ error: err.message || "Failed to setup Google Sheets." });
+  }
+});
+
+app.post("/api/sheets/sync", async (req, res) => {
+  const { accessToken } = req.body;
+  const token = accessToken || sheetsConfig.accessToken;
+  const isAuthorized = token && (accessToken || sheetsConfig.tokenExpiry > Date.now());
+
+  if (!isAuthorized) {
+    return res.status(401).json({ error: "Google authorization required or token has expired." });
+  }
+
+  if (accessToken) {
+    sheetsConfig.accessToken = accessToken;
+    sheetsConfig.tokenExpiry = Date.now() + 3500000;
+  }
+
+  if (!sheetsConfig.spreadsheetId) {
+    return res.status(400).json({ error: "No Google Spreadsheet linked yet." });
+  }
+
+  try {
+    let syncedCount = 0;
+    for (const b of battleHistory) {
+      if (!b.synced) {
+        const success = await syncBattleToGoogleSheets(b, token, sheetsConfig.spreadsheetId);
+        if (success) {
+          b.synced = true;
+          syncedCount++;
+        }
+      }
+    }
+
+    // Rewrite Leaderboard
+    const enriched = getEnrichedLeaderboard();
+    await syncLeaderboardToGoogleSheets(enriched, token, sheetsConfig.spreadsheetId);
+
+    sheetsConfig.lastSynced = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    savePersistence();
+
+    return res.json({
+      ok: true,
+      syncedCount,
+      totalBattles: battleHistory.length,
+      lastSynced: sheetsConfig.lastSynced
+    });
+  } catch (err: any) {
+    console.error("[Sheets API] Manual sync failed:", err);
+    return res.status(500).json({ error: err.message || "Manual sync failed." });
+  }
+});
+
+app.post("/api/sheets/disconnect", (req, res) => {
+  sheetsConfig.spreadsheetId = "";
+  sheetsConfig.spreadsheetUrl = "";
+  sheetsConfig.accessToken = "";
+  sheetsConfig.tokenExpiry = 0;
+  sheetsConfig.lastSynced = "";
+  savePersistence();
+  return res.json({ ok: true });
 });
 
 function detectDay() {

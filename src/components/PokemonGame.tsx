@@ -140,18 +140,29 @@ const getMoveStyle = (type: string, isBattleAnimating: boolean) => {
 };
 
 interface PokemonGameProps {
-  trainerName: string;
-  trainerAvatar: string;
-  onBackToBoot: () => void;
+  trainerName?: string;
+  trainerAvatar?: string;
+  onBackToBoot?: () => void;
+  delegatePhone?: string;
+  delegateName?: string;
+  delegateCommittee?: string;
+  apiUrl?: string;
 }
 
 export const PokemonGame: React.FC<PokemonGameProps> = ({
-  trainerName,
-  trainerAvatar,
-  onBackToBoot
+  trainerName: propTrainerName,
+  trainerAvatar: propTrainerAvatar,
+  onBackToBoot,
+  delegatePhone,
+  delegateName,
+  delegateCommittee,
+  apiUrl
 }) => {
+  const trainerName = delegateName || propTrainerName || "Trainer";
+  const trainerAvatar = propTrainerAvatar || "🔮";
+
   // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'campaign' | 'versus' | 'pokedex' | 'synth'>('campaign');
+  const [activeTab, setActiveTab] = useState<'campaign' | 'versus' | 'online_players' | 'pokedex' | 'synth'>('campaign');
   
   // Active region filters for different Pokémon selection lists
   const [campaignRegion, setCampaignRegion] = useState<string>('Kanto');
@@ -164,7 +175,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   const [battleMode, setBattleMode] = useState<'campaign' | 'versus' | 'online'>('campaign');
 
   // Online Multiplayer state
-  const [onlinePlayerPhone] = useState<string>(() => {
+  const [onlinePlayerPhone, setOnlinePlayerPhone] = useState<string>(() => {
+    if (delegatePhone) return delegatePhone;
     let id = localStorage.getItem('pokemon_trainer_phone');
     if (!id) {
       id = "9" + Math.floor(100000000 + Math.random() * 900000000).toString();
@@ -172,6 +184,19 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
     }
     return id;
   });
+
+  useEffect(() => {
+    if (delegatePhone) {
+      setOnlinePlayerPhone(delegatePhone);
+    }
+  }, [delegatePhone]);
+
+  const [personalStats, setPersonalStats] = useState<{
+    wins: number;
+    losses: number;
+    playedToday: number;
+    couponCode: string;
+  } | null>(null);
 
   const [onlineBattleId, setOnlineBattleId] = useState<string | null>(null);
   const [onlineOpponentPhone, setOnlineOpponentPhone] = useState<string | null>(null);
@@ -187,6 +212,18 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   const [roomCode, setRoomCode] = useState<string>('');
   const [enteredRoomCode, setEnteredRoomCode] = useState<string>('');
   const [roomError, setRoomError] = useState<string>('');
+
+  // Direct Challenge & Heartbeat state
+  const [activeTrainers, setActiveTrainers] = useState<any[]>([]);
+  const [receivedInvite, setReceivedInvite] = useState<any | null>(null);
+  const [sentInvite, setSentInvite] = useState<any | null>(null);
+  const [isChallengeModalOpen, setIsChallengeModalOpen] = useState<boolean>(false);
+  const [lastProcessedOnlineTurn, setLastProcessedOnlineTurnState] = useState<number>(1);
+  const lastProcessedOnlineTurnRef = useRef<number>(1);
+  const setLastProcessedOnlineTurn = (val: number) => {
+    setLastProcessedOnlineTurnState(val);
+    lastProcessedOnlineTurnRef.current = val;
+  };
   
   // Campaign progress (0 to 4 defeated bosses)
   const [campaignProgress, setCampaignProgress] = useState<number>(() => {
@@ -238,7 +275,12 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   const [p2SelectedMove, setP2SelectedMove] = useState<Move | null>(null);
 
   // Visual feedback animations
-  const [isBattleAnimating, setIsBattleAnimating] = useState(false);
+  const [isBattleAnimating, setIsBattleAnimatingState] = useState(false);
+  const isBattleAnimatingRef = useRef(false);
+  const setIsBattleAnimating = (val: boolean) => {
+    setIsBattleAnimatingState(val);
+    isBattleAnimatingRef.current = val;
+  };
   const [playerAttacking, setPlayerAttacking] = useState(false);
   const [opponentAttacking, setOpponentAttacking] = useState(false);
   const [playerHit, setPlayerHit] = useState(false);
@@ -371,6 +413,11 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   useEffect(() => {
     opponentAimLaneRef.current = opponentAimLane;
   }, [opponentAimLane]);
+
+  const playerTeamRef = useRef<Pokemon[]>(playerTeam);
+  useEffect(() => {
+    playerTeamRef.current = playerTeam;
+  }, [playerTeam]);
 
   // Encapsulated lane movement functions with sound & button-flash animations
   const movePlayerLeft = () => {
@@ -836,6 +883,22 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
         }
 
         logs.push(`Dealt ${dmg} damage.`);
+
+        // Dynamic HP drain healing resolution for offline/campaign/versus
+        const isDrainMove = act.move.category !== 'Status' && act.move.effect === 'heal';
+        if (isDrainMove) {
+          const healAmt = Math.floor(dmg * 0.5);
+          act.actor.hp = Math.min(act.actor.maxHp, act.actor.hp + healAmt);
+          logs.push(`${act.actor.name} absorbed nutrients and recovered ${healAmt} HP!`);
+          if (act.isP1) {
+            setPlayerFloat({ text: `+${healAmt} HP`, color: 'text-emerald-400 font-bold' });
+            setTimeout(() => setPlayerFloat(null), 1200);
+          } else {
+            setOpponentFloat({ text: `+${healAmt} HP`, color: 'text-emerald-400 font-bold' });
+            setTimeout(() => setOpponentFloat(null), 1200);
+          }
+        }
+
         if (act.isP1) {
           setOpponentFloat({ text: `-${dmg} HP`, color: 'text-rose-400' });
           if (effectivenessData) {
@@ -1085,7 +1148,9 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
   // --- ONLINE MULTIPLAYER ENGINE AND POLLING ---
 
-  const updateOnlineBattleState = (battle: any) => {
+  // --- ONLINE MULTIPLAYER ENGINE AND POLLING ---
+
+  const updateOnlineBattleStateDirect = (battle: any) => {
     if (!battle) return;
 
     const isPlayer1 = onlinePlayerPhone === battle.player1Phone;
@@ -1133,6 +1198,341 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
     }
   };
 
+  const executeOnlineCombatMoves = async (res: any, finalBattle: any) => {
+    setIsBattleAnimating(true);
+
+    const isPlayer1 = onlinePlayerPhone === finalBattle.player1Phone;
+    const myActiveIdx = isPlayer1 ? finalBattle.player1ActiveIndex : finalBattle.player2ActiveIndex;
+    const oppActiveIdx = isPlayer1 ? finalBattle.player2ActiveIndex : finalBattle.player1ActiveIndex;
+    
+    // Map initial teams before resolution
+    const initialMyTeam = isPlayer1 ? res.p1InitialHp.map((hp: number, i: number) => ({
+      ...finalBattle.player1Team[i],
+      hp,
+      status: res.p1InitialStatus[i]
+    })) : res.p2InitialHp.map((hp: number, i: number) => ({
+      ...finalBattle.player2Team[i],
+      hp,
+      status: res.p2InitialStatus[i]
+    }));
+
+    const initialOppTeam = isPlayer1 ? res.p2InitialHp.map((hp: number, i: number) => ({
+      ...finalBattle.player2Team[i],
+      hp,
+      status: res.p2InitialStatus[i]
+    })) : res.p1InitialHp.map((hp: number, i: number) => ({
+      ...finalBattle.player1Team[i],
+      hp,
+      status: res.p1InitialStatus[i]
+    }));
+
+    // Put local state back to initial values for sequential animation
+    setPlayerTeam(initialMyTeam);
+    setOpponentTeam(initialOppTeam);
+
+    const curP1 = initialMyTeam[myActiveIdx];
+    const curP2 = initialOppTeam[oppActiveIdx];
+
+    const logs: string[] = [...battleLogs];
+    logs.push(`\n--- Turn Action ---`);
+    setBattleLogs([...logs]);
+
+    const p1MoveName = res.player1MoveName;
+    const p2MoveName = res.player2MoveName;
+    const p1Move = curP1.moves.find((m: any) => m.name === (isPlayer1 ? p1MoveName : p2MoveName));
+    const p2Move = curP2.moves.find((m: any) => m.name === (isPlayer1 ? p2MoveName : p1MoveName));
+
+    if (!p1Move || !p2Move) {
+      setIsBattleAnimating(false);
+      updateOnlineBattleStateDirect(finalBattle);
+      return;
+    }
+
+    const p1First = curP1.speed >= curP2.speed;
+    const order = p1First
+      ? [
+          { actor: curP1, target: curP2, move: p1Move, isLocal: true },
+          { actor: curP2, target: curP1, move: p2Move, isLocal: false }
+        ]
+      : [
+          { actor: curP2, target: curP1, move: p2Move, isLocal: false },
+          { actor: curP1, target: curP2, move: p1Move, isLocal: true }
+        ];
+
+    let myFainted = false;
+    let oppFainted = false;
+
+    // Synchronize starting lanes/aims
+    const localDodge = isPlayer1 ? res.player1DodgeLane : res.player2DodgeLane;
+    const localAim = isPlayer1 ? res.player1AimLane : res.player2AimLane;
+    const remoteDodge = isPlayer1 ? res.player2DodgeLane : res.player1DodgeLane;
+    const remoteAim = isPlayer1 ? res.player2AimLane : res.player1AimLane;
+
+    setPlayerLane(localDodge);
+    playerLaneRef.current = localDodge;
+    setPlayerAimLane(localAim);
+    playerAimLaneRef.current = localAim;
+    setOpponentLane(remoteDodge);
+    opponentLaneRef.current = remoteDodge;
+    setOpponentAimLane(remoteAim);
+    opponentAimLaneRef.current = remoteAim;
+
+    for (let idx = 0; idx < order.length; idx++) {
+      const act = order[idx];
+
+      if (act.actor.hp <= 0) {
+        continue; // fainted during earlier step
+      }
+
+      // Paralysis skip check
+      if (act.actor.status === 'Paralyzed' && Math.random() < 0.25) {
+        logs.push(`${act.actor.name} is paralyzed! It can't move.`);
+        setBattleLogs([...logs]);
+        await delay(1200);
+        continue;
+      }
+
+      // 1. ANNOUNCE AND LAUNCH ATTACK
+      logs.push(`${act.isLocal ? 'Your' : "Opponent's"} ${act.actor.name} used ${act.move.name}!`);
+      setBattleLogs([...logs]);
+
+      // Attacker lunge
+      if (act.isLocal) {
+        setPlayerAttacking(true);
+        setTimeout(() => setPlayerAttacking(false), 300);
+      } else {
+        setOpponentAttacking(true);
+        setTimeout(() => setOpponentAttacking(false), 300);
+      }
+
+      const currentActorLane = act.isLocal ? localDodge : remoteDodge;
+      const currentAimLane = act.isLocal ? localAim : remoteAim;
+
+      const isHeal = act.move.category === 'Status' && act.move.effect === 'heal';
+
+      if (isHeal) {
+        gameAudio.playHeal();
+        setActiveVfx({
+          moveName: act.move.name,
+          type: 'Heal',
+          direction: act.isLocal ? 'p1_to_p2' : 'p2_to_p1',
+          stage: 'travel',
+          category: act.move.category,
+          actorLane: currentActorLane,
+          aimLane: currentAimLane
+        });
+      } else {
+        gameAudio.playBeam();
+        setActiveVfx({
+          moveName: act.move.name,
+          type: act.move.type,
+          direction: act.isLocal ? 'p1_to_p2' : 'p2_to_p1',
+          stage: 'travel',
+          category: act.move.category,
+          actorLane: currentActorLane,
+          aimLane: currentAimLane
+        });
+      }
+
+      // Wait 600ms for projectile travel
+      await delay(600);
+
+      const targetLane = act.isLocal ? remoteDodge : localDodge;
+      const isDodged = !isHeal && (currentAimLane !== targetLane);
+
+      // 2. DELAYED IMPACT RESOLUTION
+      if (!isHeal) {
+        if (isDodged) {
+          gameAudio.playPop(); // Swoosh/pop sound for dodge
+          const aimDirectionName = currentAimLane === -1 ? 'Left' : currentAimLane === 1 ? 'Right' : 'Middle';
+          const targetLaneName = targetLane === -1 ? 'Left' : targetLane === 1 ? 'Right' : 'Middle';
+          logs.push(`💨 ${act.target.name} dodged the attack! (Aimed: ${aimDirectionName} vs actual position: ${targetLaneName})`);
+          if (act.isLocal) {
+            setOpponentFloat({ text: `💨 DODGED!`, color: 'text-cyan-400 font-extrabold shadow-lg border-cyan-400/20' });
+            setTimeout(() => setOpponentFloat(null), 1000);
+          } else {
+            setPlayerFloat({ text: `💨 DODGED!`, color: 'text-cyan-400 font-extrabold shadow-lg border-cyan-400/20' });
+            setTimeout(() => setPlayerFloat(null), 1000);
+          }
+        } else {
+          // Impact VFX and Shake target
+          setActiveVfx(prev => prev ? { ...prev, stage: 'impact' } : null);
+          gameAudio.playHit();
+          if (act.isLocal) {
+            setOpponentHit(true);
+            setTimeout(() => setOpponentHit(false), 250);
+          } else {
+            setPlayerHit(true);
+            setTimeout(() => setPlayerHit(false), 250);
+          }
+        }
+      }
+
+      // Resolve stats/HP state changes using final server data for actor/target
+      if (isHeal) {
+        const finalActorHp = act.isLocal 
+          ? (isPlayer1 ? finalBattle.player1Team[myActiveIdx].hp : finalBattle.player2Team[myActiveIdx].hp)
+          : (isPlayer1 ? finalBattle.player2Team[oppActiveIdx].hp : finalBattle.player1Team[oppActiveIdx].hp);
+        
+        const healAmt = finalActorHp - act.actor.hp;
+        act.actor.hp = finalActorHp;
+
+        logs.push(`${act.actor.name} recovered ${healAmt} HP!`);
+        if (act.isLocal) {
+          setPlayerFloat({ text: `+${healAmt} HP`, color: 'text-emerald-400' });
+          setTimeout(() => setPlayerFloat(null), 1000);
+        } else {
+          setOpponentFloat({ text: `+${healAmt} HP`, color: 'text-emerald-400' });
+          setTimeout(() => setOpponentFloat(null), 1000);
+        }
+      } else if (!isDodged) {
+        const finalTargetHp = act.isLocal
+          ? (isPlayer1 ? finalBattle.player2Team[oppActiveIdx].hp : finalBattle.player1Team[oppActiveIdx].hp)
+          : (isPlayer1 ? finalBattle.player1Team[myActiveIdx].hp : finalBattle.player2Team[myActiveIdx].hp);
+
+        const dmg = act.target.hp - finalTargetHp;
+        act.target.hp = finalTargetHp;
+
+        // Dynamic HP drain healing resolution on client based on authoritative server state
+        const isDrainMove = act.move.category !== 'Status' && act.move.effect === 'heal';
+        if (isDrainMove) {
+          const finalActorHp = act.isLocal
+            ? (isPlayer1 ? finalBattle.player1Team[myActiveIdx].hp : finalBattle.player2Team[myActiveIdx].hp)
+            : (isPlayer1 ? finalBattle.player2Team[oppActiveIdx].hp : finalBattle.player1Team[oppActiveIdx].hp);
+          const healAmt = finalActorHp - act.actor.hp;
+          if (healAmt > 0) {
+            act.actor.hp = finalActorHp;
+            logs.push(`${act.actor.name} absorbed nutrients and recovered ${healAmt} HP!`);
+            if (act.isLocal) {
+              setPlayerFloat({ text: `+${healAmt} HP`, color: 'text-emerald-400 font-bold' });
+              setTimeout(() => setPlayerFloat(null), 1200);
+            } else {
+              setOpponentFloat({ text: `+${healAmt} HP`, color: 'text-emerald-400 font-bold' });
+              setTimeout(() => setOpponentFloat(null), 1200);
+            }
+          }
+        }
+
+        const finalTargetStatus = act.isLocal
+          ? (isPlayer1 ? finalBattle.player2Team[oppActiveIdx].status : finalBattle.player1Team[oppActiveIdx].status)
+          : (isPlayer1 ? finalBattle.player1Team[myActiveIdx].status : finalBattle.player2Team[myActiveIdx].status);
+        
+        if (finalTargetStatus !== act.target.status) {
+          act.target.status = finalTargetStatus;
+          logs.push(`${act.target.name} is ${finalTargetStatus}!`);
+        }
+
+        let mult = getTypeMult(act.move.type, act.target.type);
+        let effectivenessData: { text: string; badgeClass: string } | null = null;
+        if (mult > 1) {
+          logs.push("It's super effective!");
+          effectivenessData = {
+            text: "⚡ SUPER EFFECTIVE!",
+            badgeClass: "bg-amber-500 text-slate-950 border-amber-300 font-extrabold shadow-[0_0_15px_rgba(245,158,11,0.6)]"
+          };
+        } else if (mult < 1 && mult > 0) {
+          logs.push("It's not very effective...");
+          effectivenessData = {
+            text: "🛡️ NOT VERY EFFECTIVE",
+            badgeClass: "bg-slate-700 text-slate-300 border-slate-500 shadow-inner"
+          };
+        } else if (mult === 0) {
+          logs.push(`It has no effect on ${act.target.name}...`);
+          effectivenessData = {
+            text: "❌ NO EFFECT",
+            badgeClass: "bg-rose-950 text-rose-300 border-rose-850 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
+          };
+        } else {
+          effectivenessData = {
+            text: "🎯 EFFECTIVE",
+            badgeClass: "bg-sky-500 text-slate-950 border-sky-300 shadow-[0_0_12px_rgba(14,165,233,0.5)]"
+          };
+        }
+
+        logs.push(`Dealt ${dmg} damage.`);
+        if (act.isLocal) {
+          setOpponentFloat({ text: `-${dmg} HP`, color: 'text-rose-400' });
+          if (effectivenessData) {
+            setOpponentEffectiveness(effectivenessData);
+            setTimeout(() => setOpponentEffectiveness(null), 1500);
+          }
+          setTimeout(() => setOpponentFloat(null), 1000);
+        } else {
+          setPlayerFloat({ text: `-${dmg} HP`, color: 'text-rose-400' });
+          if (effectivenessData) {
+            setPlayerEffectiveness(effectivenessData);
+            setTimeout(() => setPlayerEffectiveness(null), 1500);
+          }
+          setTimeout(() => setPlayerFloat(null), 1000);
+        }
+
+        if (act.target.hp <= 0) {
+          logs.push(`${act.target.name} fainted!`);
+          setTimeout(() => gameAudio.playFaint(), 200);
+          if (act.isLocal) oppFainted = true;
+          else myFainted = true;
+        }
+      }
+
+      setBattleLogs([...logs]);
+
+      await delay(500);
+      setActiveVfx(null);
+
+      await delay(900);
+
+      if (myFainted || oppFainted) {
+        break;
+      }
+    }
+
+    setIsBattleAnimating(false);
+    updateOnlineBattleStateDirect(finalBattle);
+  };
+
+  const updateOnlineBattleState = (battle: any) => {
+    if (!battle) return;
+
+    if (battle.turn > lastProcessedOnlineTurnRef.current) {
+      setLastProcessedOnlineTurn(battle.turn);
+      if (battle.lastTurnResolved && battle.turn > 1) {
+        executeOnlineCombatMoves(battle.lastTurnResolved, battle);
+      } else {
+        updateOnlineBattleStateDirect(battle);
+      }
+    } else {
+      if (!isBattleAnimatingRef.current) {
+        updateOnlineBattleStateDirect(battle);
+      }
+    }
+  };
+
+  const handleOnlineSubmitMove = async (move: Move) => {
+    if (!onlineBattleId || !onlinePlayerPhone || isOnlineTurnWaiting) return;
+    gameAudio.playSelect();
+    setIsOnlineTurnWaiting(true);
+
+    try {
+      const response = await fetch('/api/game/battle-submit-move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          battleId: onlineBattleId,
+          myPhone: onlinePlayerPhone,
+          moveName: move.name,
+          aimLane: playerAimLaneRef.current,
+          dodgeLane: playerLaneRef.current
+        })
+      });
+      const data = await response.json();
+      if (data.ok) {
+        updateOnlineBattleState(data.battle);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleOnlinePlayerSwitch = async (idx: number) => {
     if (battleMode === 'online' && onlineBattleId) {
       try {
@@ -1153,12 +1553,30 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
     }
   };
 
+  const initOnlineBattleState = (battleId: string) => {
+    setOnlineBattleId(battleId);
+    setBattleMode('online');
+    setGameState('battle');
+    setLastProcessedOnlineTurn(1);
+    setIsOnlineTurnWaiting(false);
+    setPlayerLane(0);
+    playerLaneRef.current = 0;
+    setPlayerAimLane(0);
+    playerAimLaneRef.current = 0;
+    setOpponentLane(0);
+    opponentLaneRef.current = 0;
+    setOpponentAimLane(0);
+    opponentAimLaneRef.current = 0;
+  };
+
   const handleStartMatchmaking = async () => {
-    const curSelectedTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
-    if (curSelectedTeam.length !== 3) {
-      alert("Please draft exactly 3 Pokémon before starting matchmaking!");
-      return;
+    let curSelectedIds = [...selectedPokeIdsP1];
+    if (curSelectedIds.length !== 3) {
+      // Auto-draft first 3 Pokémon
+      curSelectedIds = POKEMON_ROSTER.slice(0, 3).map(p => p.id);
+      setSelectedPokeIdsP1(curSelectedIds);
     }
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => curSelectedIds.includes(p.id)).map(p => ({ ...p }));
     
     gameAudio.playSelect();
     setMatchmakingStatus('searching');
@@ -1178,10 +1596,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
       const data = await response.json();
       if (data.ok && data.matched) {
         setMatchmakingStatus('matched');
-        setOnlineBattleId(data.battleId);
+        initOnlineBattleState(data.battleId);
         setOnlineOpponentName(data.opponentName);
-        setBattleMode('online');
-        setGameState('battle');
         gameAudio.playHeal();
       }
     } catch (e) {
@@ -1204,11 +1620,13 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
   };
 
   const handleCreateRoom = async () => {
-    const curSelectedTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
-    if (curSelectedTeam.length !== 3) {
-      alert("Please draft exactly 3 Pokémon before creating a room!");
-      return;
+    let curSelectedIds = [...selectedPokeIdsP1];
+    if (curSelectedIds.length !== 3) {
+      // Auto-draft first 3 Pokémon
+      curSelectedIds = POKEMON_ROSTER.slice(0, 3).map(p => p.id);
+      setSelectedPokeIdsP1(curSelectedIds);
     }
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => curSelectedIds.includes(p.id)).map(p => ({ ...p }));
     
     gameAudio.playSelect();
     setRoomError('');
@@ -1244,11 +1662,13 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
       return;
     }
     
-    const curSelectedTeam = POKEMON_ROSTER.filter(p => selectedPokeIdsP1.includes(p.id)).map(p => ({ ...p }));
-    if (curSelectedTeam.length !== 3) {
-      alert("Please draft exactly 3 Pokémon before joining a room!");
-      return;
+    let curSelectedIds = [...selectedPokeIdsP1];
+    if (curSelectedIds.length !== 3) {
+      // Auto-draft first 3 Pokémon
+      curSelectedIds = POKEMON_ROSTER.slice(0, 3).map(p => p.id);
+      setSelectedPokeIdsP1(curSelectedIds);
     }
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => curSelectedIds.includes(p.id)).map(p => ({ ...p }));
     
     gameAudio.playSelect();
     setRoomError('');
@@ -1267,9 +1687,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
       });
       const data = await response.json();
       if (data.ok) {
-        setOnlineBattleId(data.battleId);
-        setBattleMode('online');
-        setGameState('battle');
+        initOnlineBattleState(data.battleId);
         gameAudio.playHeal();
       } else {
         setRoomError(data.error || 'Failed to join room.');
@@ -1310,10 +1728,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
             clearInterval(countdownInterval);
             clearInterval(pollInterval);
             setMatchmakingStatus('matched');
-            setOnlineBattleId(data.battleId);
+            initOnlineBattleState(data.battleId);
             setOnlineOpponentName(data.opponentName);
-            setBattleMode('online');
-            setGameState('battle');
             gameAudio.playHeal();
           } else if (data.timeout) {
             clearInterval(countdownInterval);
@@ -1351,10 +1767,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           if (data.room.battleId) {
             clearInterval(pollInterval);
             setRoomStatus('idle');
-            setOnlineBattleId(data.room.battleId);
+            initOnlineBattleState(data.room.battleId);
             setOnlineOpponentName(data.room.guestName || "Guest");
-            setBattleMode('online');
-            setGameState('battle');
             gameAudio.playHeal();
           }
         }
@@ -1369,6 +1783,201 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
     };
   }, [roomStatus, roomCode]);
 
+  // --- DIRECT CHALLENGE ENGINE HANDLERS AND POLLING ---
+
+  const handleSendChallenge = async (opponent: any) => {
+    let curSelectedIds = [...selectedPokeIdsP1];
+    if (curSelectedIds.length !== 3) {
+      // Auto-draft first 3 Pokémon
+      curSelectedIds = POKEMON_ROSTER.slice(0, 3).map(p => p.id);
+      setSelectedPokeIdsP1(curSelectedIds);
+    }
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => curSelectedIds.includes(p.id)).map(p => ({ ...p }));
+    
+    gameAudio.playSelect();
+    setPlayerTeam(curSelectedTeam);
+
+    try {
+      const response = await fetch('/api/game/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromPhone: onlinePlayerPhone,
+          fromName: trainerName,
+          toPhone: opponent.phone,
+          fromTeam: curSelectedTeam
+        })
+      });
+      const data = await response.json();
+      if (data.ok && data.invite) {
+        setSentInvite({ ...data.invite, toName: opponent.name });
+        setIsChallengeModalOpen(true);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAcceptInvite = async () => {
+    if (!receivedInvite) return;
+    let curSelectedIds = [...selectedPokeIdsP1];
+    if (curSelectedIds.length !== 3) {
+      // Auto-draft first 3 Pokémon
+      curSelectedIds = POKEMON_ROSTER.slice(0, 3).map(p => p.id);
+      setSelectedPokeIdsP1(curSelectedIds);
+    }
+    const curSelectedTeam = POKEMON_ROSTER.filter(p => curSelectedIds.includes(p.id)).map(p => ({ ...p }));
+    
+    gameAudio.playSelect();
+    setPlayerTeam(curSelectedTeam);
+
+    try {
+      const response = await fetch('/api/game/accept-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: receivedInvite.id,
+          toTeam: curSelectedTeam
+        })
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setReceivedInvite(null);
+        initOnlineBattleState(data.battleId);
+        gameAudio.playHeal();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeclineInvite = async () => {
+    if (!receivedInvite) return;
+    gameAudio.playFaint();
+    try {
+      await fetch('/api/game/decline-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: receivedInvite.id })
+      });
+      setReceivedInvite(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCancelSentChallenge = async () => {
+    if (!sentInvite) return;
+    gameAudio.playFaint();
+    try {
+      await fetch('/api/game/decline-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: sentInvite.id })
+      });
+      setSentInvite(null);
+      setIsChallengeModalOpen(false);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Polling loop for online trainers heartbeat and incoming direct invites
+  useEffect(() => {
+    if (gameState !== 'lobby') return;
+
+    let active = true;
+    
+    const fetchPersonalStats = async () => {
+      try {
+        const statsRes = await fetch(`/api/game/trainer-records?phone=${encodeURIComponent(onlinePlayerPhone)}`);
+        const statsData = await statsRes.json();
+        if (active && statsData.ok && statsData.stats) {
+          setPersonalStats(statsData.stats);
+        }
+      } catch (err) {
+        console.error("Error fetching personal stats:", err);
+      }
+    };
+    fetchPersonalStats();
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/game/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: onlinePlayerPhone,
+            name: trainerName,
+            committee: 'Trainer'
+          })
+        });
+        if (!active) return;
+        const data = await response.json();
+        if (data.ok) {
+          setActiveTrainers(data.onlinePlayers || []);
+          if (data.incomingInvite) {
+            setReceivedInvite(data.incomingInvite);
+          } else {
+            setReceivedInvite(null);
+          }
+        }
+      } catch (e) {
+        console.error("Error with heartbeat:", e);
+      }
+
+      // Refresh stats
+      fetchPersonalStats();
+    }, 3000);
+
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [gameState, onlinePlayerPhone, trainerName]);
+
+  // Polling loop for direct challenge we sent
+  useEffect(() => {
+    if (!sentInvite || sentInvite.status !== 'pending') return;
+
+    let active = true;
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/game/invite-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: sentInvite.id })
+        });
+        if (!active) return;
+        const data = await response.json();
+        if (data.ok) {
+          if (data.status === 'accepted') {
+            clearInterval(pollInterval);
+            setSentInvite(null);
+            setIsChallengeModalOpen(false);
+            
+            // Start direct battle!
+            initOnlineBattleState("battle_" + sentInvite.id);
+            gameAudio.playHeal();
+          } else if (data.status === 'declined') {
+            clearInterval(pollInterval);
+            alert(`${sentInvite.toName || 'Challenger'} declined your battle challenge.`);
+            setSentInvite(null);
+            setIsChallengeModalOpen(false);
+            gameAudio.playFaint();
+          }
+        }
+      } catch (e) {
+        console.error("Error checking invite status:", e);
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [sentInvite]);
+
   // Polling loop for active online battle state
   useEffect(() => {
     if (gameState !== 'battle' || battleMode !== 'online' || !onlineBattleId) return;
@@ -1382,7 +1991,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
           body: JSON.stringify({
             battleId: onlineBattleId,
             myPhone: onlinePlayerPhone,
-            myTeam: playerTeam
+            myTeam: playerTeamRef.current
           })
         });
         if (!active) return;
@@ -1457,7 +2066,8 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
         <div className="flex flex-wrap gap-2.5 bg-slate-900/50 border border-slate-800 p-2.5 rounded-2xl">
           {[
             { id: 'campaign', label: '🏆 Campaign Mode', desc: 'Fight School Mentors' },
-            { id: 'versus', label: '⚔️ Local Versus', desc: 'Pass & Play Friends' },
+            { id: 'versus', label: '⚔️ Local Multiplayer', desc: 'Pass & Play Friends' },
+            { id: 'online_players', label: '🌐 Online Players', desc: 'Duel Online Trainers' },
             { id: 'pokedex', label: '📚 Pokédex Academy', desc: 'Type advantage stats' },
             { id: 'synth', label: '🎹 8-Bit Synthesizer', desc: 'Live Piano Soundboard' }
           ].map(t => {
@@ -1713,10 +2323,10 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                 <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
                   <div>
                     <span className="text-[9px] uppercase font-pressstart tracking-widest text-amber-500 font-bold block mb-1">
-                      VERSUS TRAINING SECTOR
+                      LOCAL MULTIPLAYER SECTOR
                     </span>
                     <h2 className="pokemon-logo-text text-xl sm:text-2xl font-black tracking-widest leading-none mt-1">
-                      BATTLE CHAMPIONS
+                      LOCAL MULTIPLAYER
                     </h2>
                     <p className="text-xs text-slate-400 font-mono mt-1.5 max-w-md">
                       Test your tactical prowess locally or connect with trainers across the globe in 3v3 combat.
@@ -1729,11 +2339,11 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                 </div>
               </div>
 
-              {/* Main Dual Grid: Local Versus vs Online Multiplayer */}
+              {/* Main Dual Grid: Local Versus */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                {/* LEFT SIDE: Team Draft & Local Mode */}
-                <div className="lg:col-span-7 space-y-6">
+                {/* Team Draft & Local Mode */}
+                <div className="lg:col-span-12 space-y-6">
                   
                   {/* Local Mode Launcher */}
                   <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 hover:border-slate-800 transition-all">
@@ -1761,6 +2371,359 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                     <div className="border-b border-slate-900 pb-3 mb-4 flex justify-between items-center flex-wrap gap-2">
                       <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300">
                         1. Choose 3-Pokémon Squad
+                      </h3>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${selectedPokeIdsP1.length === 3 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                        {selectedPokeIdsP1.length === 3 ? 'Ready' : `${selectedPokeIdsP1.length}/3 Chosen`}
+                      </span>
+                    </div>
+
+                    {/* Region Selector */}
+                    <div className="flex gap-1 overflow-x-auto pb-2 mb-3.5 scrollbar-none border-b border-slate-900/50">
+                      {REGION_TABS.map(tab => {
+                        const isActive = draftP1Region === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              gameAudio.playSelect();
+                              setDraftP1Region(tab.id);
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-[9px] font-mono uppercase tracking-wider border transition-all whitespace-nowrap ${
+                              isActive
+                                ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 font-bold'
+                                : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                            }`}
+                          >
+                            {tab.id}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pokémon Selection Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[310px] overflow-y-auto pr-1 scrollbar-thin">
+                      {POKEMON_ROSTER.filter(p => p.region === draftP1Region).map(p => {
+                        const isSelected = selectedPokeIdsP1.includes(p.id);
+                        const selectIdx = selectedPokeIdsP1.indexOf(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handlePokeToggleP1(p.id)}
+                            className={`text-left p-2 rounded-xl border text-[11px] transition-all relative overflow-hidden flex flex-col justify-between h-[105px] ${
+                              isSelected
+                                ? 'border-amber-500 bg-amber-500/10'
+                                : 'border-slate-900 bg-slate-950/60 hover:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start w-full gap-1">
+                              <span className="font-bold text-slate-200 truncate pr-4">{p.name}</span>
+                              {isSelected && (
+                                <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-bold font-mono flex items-center justify-center">
+                                  {selectIdx + 1}
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-10 h-10 my-1 self-center flex items-center justify-center bg-slate-950/40 rounded-lg overflow-hidden border border-slate-900">
+                              <img 
+                                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.dexNumber}.png`}
+                                alt={p.name}
+                                className="w-full h-full object-contain"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.dexNumber}.png`;
+                                }}
+                              />
+                            </div>
+                            <div className="flex gap-1 flex-wrap mt-0.5">
+                              {p.type.map(t => {
+                                const style = getTypePillColor(t);
+                                return (
+                                  <span key={t} className={`text-[7px] font-mono px-1 py-0.2 rounded border ${style.bg} ${style.text} ${style.border}`}>
+                                    {t}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                            <div className="text-[9px] font-mono text-slate-500 mt-1 font-bold">HP: {p.hp} · Speed: {p.speed}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Active Selected Squad display */}
+                    <div className="mt-4 bg-slate-950/40 border border-slate-900 p-3 rounded-xl space-y-2">
+                      <div className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">
+                        Current Team Composition
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[0, 1, 2].map(idx => {
+                          const targetId = selectedPokeIdsP1[idx];
+                          const poke = POKEMON_ROSTER.find(x => x.id === targetId);
+                          return (
+                            <div key={idx} className="flex flex-col items-center justify-center p-2 rounded-lg border border-dashed border-slate-850 bg-slate-950/60 min-h-[70px]">
+                              {poke ? (
+                                <>
+                                  <PokemonSprite name={poke.name} dexNumber={poke.dexNumber} className="w-8 h-8 object-contain" />
+                                  <span className="text-[9px] text-slate-300 font-bold truncate max-w-full mt-1">{poke.name}</span>
+                                </>
+                              ) : (
+                                <span className="text-[8px] text-slate-600 font-mono">Empty</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* 2.5 ONLINE PLAYERS TAB */}
+          {activeTab === 'online_players' && (
+            <div className="space-y-6 animate-fade">
+              {/* Header Visualizer */}
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-2 border-slate-900/80 rounded-2xl p-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-sky-500/5 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+                  <div>
+                    <span className="text-[9px] uppercase font-pressstart tracking-widest text-amber-500 font-bold block mb-1">
+                      ONLINE MULTIPLAYER HUB
+                    </span>
+                    <h2 className="pokemon-logo-text text-xl sm:text-2xl font-black tracking-widest leading-none mt-1">
+                      ONLINE TRAINERS
+                    </h2>
+                    <p className="text-xs text-slate-400 font-mono mt-1.5 max-w-md">
+                      Instantly duel active online players, find random matches, or join private rooms.
+                    </p>
+                  </div>
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-2.5 text-center md:text-right">
+                    <div className="text-[8px] font-mono text-slate-500 uppercase">Your Trainer ID</div>
+                    <div className="text-xs font-mono text-amber-400 font-bold mt-0.5">#{onlinePlayerPhone}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Personal Trainer Card & Dynamic Rewards Status */}
+              {personalStats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-950 border-2 border-slate-900 rounded-2xl p-4">
+                  <div className="flex items-center gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-900">
+                    <div className="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg text-lg font-bold">🏆</div>
+                    <div>
+                      <div className="text-[9px] text-slate-500 font-mono uppercase">Total Wins</div>
+                      <div className="text-sm font-bold text-emerald-400 font-mono">{personalStats.wins} Matches</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-900">
+                    <div className="bg-rose-500/10 text-rose-400 p-2 rounded-lg text-lg font-bold">💀</div>
+                    <div>
+                      <div className="text-[9px] text-slate-500 font-mono uppercase">Total Losses</div>
+                      <div className="text-sm font-bold text-rose-400 font-mono">{personalStats.losses} Matches</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 bg-gradient-to-r from-amber-500/10 to-transparent p-3 rounded-xl border border-gold/10">
+                    <div className="bg-gold/10 text-gold p-2 rounded-lg text-lg font-bold">🎁</div>
+                    <div>
+                      <div className="text-[9px] text-gold-light font-mono uppercase">Today's Coupon Code</div>
+                      <div className="text-xs font-black text-white font-mono tracking-wide mt-0.5">{personalStats.couponCode}</div>
+                      <div className="text-[9px] text-slate-500 font-mono">({personalStats.playedToday} matches played today)</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Dual Grid: Online Lobby & Team Draft */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT COLUMN: Online Lobby, Matchmaking & Custom Rooms */}
+                <div className="lg:col-span-6 space-y-6">
+                  
+                  {/* ACTIVE TRAINERS LOBBY & DIRECT CHALLENGE */}
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 space-y-4">
+                    <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300 border-b border-slate-900 pb-3 flex items-center justify-between">
+                      <span>⚡ Online Active Trainers</span>
+                      <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-mono">
+                        {activeTrainers.length} Live
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                      Select any active trainer below to send an instant duel request! They'll receive a retro Poke-Phone alert to accept.
+                    </p>
+
+                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin">
+                      {activeTrainers.length === 0 ? (
+                        <div className="text-center py-8 bg-slate-900/20 border border-dashed border-slate-900 rounded-xl space-y-2">
+                          <p className="text-[11px] text-slate-500 font-mono italic">
+                            No other active trainers online right now.
+                          </p>
+                          <p className="text-[10px] text-slate-600 font-mono max-w-xs mx-auto">
+                            💡 Tip: Open another browser window or tab in incognito mode to simulate and test real-time direct duels!
+                          </p>
+                        </div>
+                      ) : (
+                        activeTrainers.map(trainer => (
+                          <div
+                            key={trainer.phone}
+                            className="flex justify-between items-center bg-slate-900/40 border border-slate-850/60 rounded-xl p-3 transition-all hover:border-slate-800"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-xl">🔴</span>
+                              <div className="flex flex-col text-left">
+                                <span className="text-xs font-bold text-slate-200">{trainer.name}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">Trainer ID: #{trainer.phone}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleSendChallenge(trainer)}
+                              className="px-3 py-1.5 text-[9px] font-mono font-bold rounded-lg uppercase tracking-wider transition-all flex items-center gap-1 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95 shadow-[0_2px_10px_rgba(245,158,11,0.2)]"
+                            >
+                              Duel ⚔️
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* MATCHMAKING SECTION */}
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 space-y-4">
+                    <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300 border-b border-slate-900 pb-3">
+                      🌍 Matchmaking Lobby
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                      Find a random online challenger instantly. Matchmaking will find a partner in less than 30 seconds.
+                    </p>
+
+                    {matchmakingStatus === 'idle' && (
+                      <button
+                        onClick={handleStartMatchmaking}
+                        className="w-full py-3.5 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 hover:shadow-[0_0_20px_rgba(56,189,248,0.25)] active:scale-95"
+                      >
+                        ⚡ START MATCHMAKING
+                      </button>
+                    )}
+
+                    {matchmakingStatus === 'searching' && (
+                      <div className="space-y-2 border border-sky-500/20 bg-sky-500/5 rounded-xl p-3 text-center animate-pulse">
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+                          <span className="text-[10px] font-mono font-bold text-sky-400">CONNECTING TO LOBBY SERVER...</span>
+                        </div>
+                        <div className="text-xl font-mono text-white font-bold">{matchmakingTimer}s</div>
+                        <p className="text-[10px] text-slate-400 font-mono">Looking for an active trainer...</p>
+                        <button
+                          onClick={() => handleCancelMatchmaking(false)}
+                          className="text-[9px] text-rose-400 hover:text-rose-300 font-mono uppercase underline tracking-wider block mx-auto"
+                        >
+                          Cancel Search
+                        </button>
+                      </div>
+                    )}
+
+                    {matchmakingStatus === 'timeout' && (
+                      <div className="space-y-2 border border-rose-500/20 bg-rose-500/5 rounded-xl p-3 text-center">
+                        <div className="text-[10px] font-mono font-bold text-rose-400 uppercase">⌛ MATCHMAKING TIMEOUT</div>
+                        <p className="text-[10px] text-slate-400 font-mono">No active challenger was found in the queue. Open another tab or try again!</p>
+                        <button
+                          onClick={handleStartMatchmaking}
+                          className="text-[10px] text-sky-400 hover:text-sky-300 font-mono uppercase underline tracking-wider block mx-auto"
+                        >
+                          Retry Matchmaking
+                        </button>
+                      </div>
+                    )}
+
+                    {matchmakingStatus === 'matched' && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-center rounded-xl p-3 text-[10px] font-mono font-bold uppercase animate-bounce">
+                        🎯 Challenger Found! Teleporting to Arena...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CUSTOM BATTLE ROOMS SECTION */}
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 space-y-4">
+                    <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300 border-b border-slate-900 pb-3">
+                      🔑 Custom Battle Room
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                      Create a room to get a code, share it with a friend, and battle instantly.
+                    </p>
+
+                    {roomError && (
+                      <div className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-xl p-2">
+                        ⚠️ {roomError}
+                      </div>
+                    )}
+
+                    {roomStatus === 'idle' && (
+                      <div className="grid grid-cols-1 gap-3">
+                        <button
+                          onClick={handleCreateRoom}
+                          className="w-full py-2.5 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700 active:scale-95"
+                        >
+                          ➕ Create New Room
+                        </button>
+
+                        <div className="relative flex py-1 items-center">
+                          <div className="flex-grow border-t border-slate-900" />
+                          <span className="flex-shrink mx-3 text-[9px] font-mono text-slate-500 uppercase">OR JOIN ROOM</span>
+                          <div className="flex-grow border-t border-slate-900" />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={enteredRoomCode}
+                            onChange={(e) => setEnteredRoomCode(e.target.value.toUpperCase())}
+                            placeholder="CODE"
+                            maxLength={6}
+                            className="w-1/3 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-center text-xs font-mono font-bold tracking-widest text-amber-400 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            onClick={handleJoinRoom}
+                            className="flex-1 py-2 px-4 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95"
+                          >
+                            Join Match
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {roomStatus === 'hosting' && (
+                      <div className="space-y-3 border border-amber-500/20 bg-amber-500/5 rounded-xl p-3.5 text-center">
+                        <div className="text-[10px] font-mono text-slate-400">ROOM CREATED SUCCESSFULLY!</div>
+                        <div className="text-2xl font-mono text-amber-400 font-black tracking-widest bg-slate-950 border border-slate-800 py-1.5 rounded-lg">
+                          {roomCode}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          Share this code with your friend. The battle starts automatically once they join!
+                        </p>
+                        <button
+                          onClick={() => {
+                            setRoomStatus('idle');
+                            setRoomCode('');
+                          }}
+                          className="text-[9px] text-rose-400 hover:text-rose-300 font-mono uppercase underline tracking-wider block mx-auto"
+                        >
+                          Close Room
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* RIGHT COLUMN: Choose 3-Pokémon Squad for Online */}
+                <div className="lg:col-span-6 space-y-6">
+                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5">
+                    <div className="border-b border-slate-900 pb-3 mb-4 flex justify-between items-center flex-wrap gap-2">
+                      <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300">
+                        Draft 3-Pokémon Squad
                       </h3>
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${selectedPokeIdsP1.length === 3 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                         {selectedPokeIdsP1.length === 3 ? 'Ready' : `${selectedPokeIdsP1.length}/3 Chosen`}
@@ -1866,162 +2829,6 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* RIGHT SIDE: Online Multiplayer Arena */}
-                <div className="lg:col-span-5 space-y-6">
-                  
-                  {/* Mode Selector Panel */}
-                  <div className="bg-slate-950 border-2 border-slate-900 rounded-2xl p-5 space-y-5">
-                    <h3 className="text-xs uppercase font-pressstart tracking-wider text-slate-300 border-b border-slate-900 pb-3">
-                      2. Online Versus Arena
-                    </h3>
-
-                    {/* MATCHMAKING SECTION */}
-                    <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-3">
-                      <h4 className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
-                        🌍 Online Matchmaking
-                      </h4>
-                      <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
-                        Find a random online challenger instantly. Matchmaking will find a partner in less than 30 seconds.
-                      </p>
-
-                      {matchmakingStatus === 'idle' && (
-                        <button
-                          onClick={handleStartMatchmaking}
-                          disabled={selectedPokeIdsP1.length !== 3}
-                          className={`w-full py-3 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all flex items-center justify-center gap-2 ${
-                            selectedPokeIdsP1.length === 3
-                              ? 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 hover:shadow-[0_0_20px_rgba(56,189,248,0.25)] active:scale-95'
-                              : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                          }`}
-                        >
-                          ⚡ START MATCHMAKING
-                        </button>
-                      )}
-
-                      {matchmakingStatus === 'searching' && (
-                        <div className="space-y-2 border border-sky-500/20 bg-sky-500/5 rounded-xl p-3 text-center animate-pulse">
-                          <div className="flex items-center justify-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
-                            <span className="text-[10px] font-mono font-bold text-sky-400">CONNECTING TO LOBBY SERVER...</span>
-                          </div>
-                          <div className="text-xl font-mono text-white font-bold">{matchmakingTimer}s</div>
-                          <p className="text-[10px] text-slate-400 font-mono">Looking for an active trainer...</p>
-                          <button
-                            onClick={() => handleCancelMatchmaking(false)}
-                            className="text-[9px] text-rose-400 hover:text-rose-300 font-mono uppercase underline tracking-wider mt-1 block mx-auto"
-                          >
-                            Cancel Search
-                          </button>
-                        </div>
-                      )}
-
-                      {matchmakingStatus === 'timeout' && (
-                        <div className="space-y-2 border border-rose-500/20 bg-rose-500/5 rounded-xl p-3 text-center">
-                          <div className="text-[10px] font-mono font-bold text-rose-400 uppercase">⌛ MATCHMAKING TIMEOUT</div>
-                          <p className="text-[10px] text-slate-400 font-mono">No active challenger was found in the queue. Open another tab or try again!</p>
-                          <button
-                            onClick={handleStartMatchmaking}
-                            className="text-[10px] text-sky-400 hover:text-sky-300 font-mono uppercase underline tracking-wider block mx-auto"
-                          >
-                            Retry Matchmaking
-                          </button>
-                        </div>
-                      )}
-
-                      {matchmakingStatus === 'matched' && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-center rounded-xl p-3 text-[10px] font-mono font-bold uppercase animate-bounce">
-                          🎯 Challenger Found! Teleporting to Arena...
-                        </div>
-                      )}
-                    </div>
-
-                    {/* CUSTOM BATTLE ROOMS SECTION */}
-                    <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-4 space-y-4">
-                      <h4 className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
-                        🔑 Custom Battle Room
-                      </h4>
-                      <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
-                        Create a room to get a code, share it with a friend, and battle instantly.
-                      </p>
-
-                      {roomError && (
-                        <div className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/5 border border-rose-500/20 rounded-xl p-2">
-                          ⚠️ {roomError}
-                        </div>
-                      )}
-
-                      {roomStatus === 'idle' && (
-                        <div className="grid grid-cols-1 gap-3">
-                          {/* Create Room Option */}
-                          <button
-                            onClick={handleCreateRoom}
-                            disabled={selectedPokeIdsP1.length !== 3}
-                            className={`w-full py-2.5 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all ${
-                              selectedPokeIdsP1.length === 3
-                                ? 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-900 hover:border-slate-700 active:scale-95'
-                                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                            }`}
-                          >
-                            ➕ Create New Room
-                          </button>
-
-                          <div className="relative flex py-1 items-center">
-                            <div className="flex-grow border-t border-slate-900" />
-                            <span className="flex-shrink mx-3 text-[9px] font-mono text-slate-500 uppercase">OR JOIN ROOM</span>
-                            <div className="flex-grow border-t border-slate-900" />
-                          </div>
-
-                          {/* Join Room Inputs */}
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={enteredRoomCode}
-                              onChange={(e) => setEnteredRoomCode(e.target.value.toUpperCase())}
-                              placeholder="CODE"
-                              maxLength={6}
-                              className="w-1/3 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-center text-xs font-mono font-bold tracking-widest text-amber-400 focus:outline-none focus:border-amber-500"
-                            />
-                            <button
-                              onClick={handleJoinRoom}
-                              disabled={selectedPokeIdsP1.length !== 3}
-                              className={`flex-1 py-2 px-4 text-[10px] font-mono tracking-wider font-bold rounded-xl uppercase transition-all ${
-                                selectedPokeIdsP1.length === 3
-                                  ? 'bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95'
-                                  : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                              }`}
-                            >
-                              Join Match
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {roomStatus === 'hosting' && (
-                        <div className="space-y-3 border border-amber-500/20 bg-amber-500/5 rounded-xl p-3.5 text-center">
-                          <div className="text-[10px] font-mono text-slate-400">ROOM CREATED SUCCESSFULLY!</div>
-                          <div className="text-2xl font-mono text-amber-400 font-black tracking-widest bg-slate-950 border border-slate-800 py-1.5 rounded-lg">
-                            {roomCode}
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-mono">
-                            Share this code with your friend. The battle starts automatically once they join!
-                          </p>
-                          <button
-                            onClick={() => {
-                              setRoomStatus('idle');
-                              setRoomCode('');
-                            }}
-                            className="text-[9px] text-rose-400 hover:text-rose-300 font-mono uppercase underline tracking-wider block mx-auto"
-                          >
-                            Close Room
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-
                 </div>
 
               </div>
@@ -2339,6 +3146,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             );
                           })}
                         </div>
+                        <div className="text-[9px] font-mono text-slate-500 mt-1 font-bold">HP: {p.hp} · Speed: {p.speed}</div>
                       </button>
                     );
                   })}
@@ -2439,6 +3247,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             );
                           })}
                         </div>
+                        <div className="text-[9px] font-mono text-slate-500 mt-1 font-bold">HP: {p.hp} · Speed: {p.speed}</div>
                       </button>
                     );
                   })}
@@ -2493,7 +3302,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
       {/* ACTIVE COMBAT GROUND (BATTLE SCREEN) */}
       {(gameState === 'battle' || gameState === 'gameOver') && playerTeam.length > 0 && opponentTeam.length > 0 && (
-        battleMode === 'online' ? (
+        battleMode === 'online' && false ? (
           <div className="relative w-full">
             <BattleArena
               battleMode="online"
@@ -2687,6 +3496,9 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                   {Math.round((opponentTeam[activeOpponentIdx].hp / opponentTeam[activeOpponentIdx].maxHp) * 100)}%
                 </span>
               </div>
+              <div className="text-[9px] font-mono text-slate-300 mt-1 text-left font-bold tracking-tight">
+                HP: {opponentTeam[activeOpponentIdx].hp} / {opponentTeam[activeOpponentIdx].maxHp}
+              </div>
             </div>
 
             {/* OPPONENT ACTIVE SPRITE (Top Right - Aligned with 78% X, 28% Y coordinate) */}
@@ -2798,6 +3610,9 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                   {Math.round((playerTeam[activePlayerIdx].hp / playerTeam[activePlayerIdx].maxHp) * 100)}%
                 </span>
               </div>
+              <div className="text-[9px] font-mono text-slate-300 mt-1 text-right font-bold tracking-tight">
+                HP: {playerTeam[activePlayerIdx].hp} / {playerTeam[activePlayerIdx].maxHp}
+              </div>
             </div>
 
             {/* Real-time Field Position HUD indicators integrated in the moveset panel below */}
@@ -2843,13 +3658,13 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                             🎯 TARGET DIRECTION
                           </span>
                           <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full uppercase">
-                            {((battleMode === 'campaign' || pvpTurnState === 'p1_select') ? playerAimLane : opponentAimLane) === -1 ? 'LEFT TRACK' :
-                             ((battleMode === 'campaign' || pvpTurnState === 'p1_select') ? playerAimLane : opponentAimLane) === 1 ? 'RIGHT TRACK' : 'CENTER TRACK'}
+                            {((battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select') ? playerAimLane : opponentAimLane) === -1 ? 'LEFT TRACK' :
+                             ((battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select') ? playerAimLane : opponentAimLane) === 1 ? 'RIGHT TRACK' : 'CENTER TRACK'}
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                           {[-1, 0, 1].map((laneVal) => {
-                            const isCurrentP1 = battleMode === 'campaign' || pvpTurnState === 'p1_select';
+                            const isCurrentP1 = battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select';
                             const isActive = isCurrentP1 ? (playerAimLane === laneVal) : (opponentAimLane === laneVal);
                             const laneLabel = laneVal === -1 ? 'LEFT' : laneVal === 1 ? 'RIGHT' : 'CENTER';
                             const icon = laneVal === -1 ? '◀' : laneVal === 1 ? '▶' : '▲';
@@ -2888,12 +3703,12 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                               🛡️ DODGE POSITION
                             </span>
                             <span className="hidden xs:inline text-[8px] text-slate-500 font-mono">
-                              {(battleMode === 'campaign' || pvpTurnState === 'p1_select') ? 'Control P1 with A/D or ARROWS' : 'Control P2 with ARROWS'}
+                              {(battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select') ? 'Control with A/D or ARROWS' : 'Control P2 with ARROWS'}
                             </span>
                           </div>
                           <span className="text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full uppercase">
-                            {((battleMode === 'campaign' || pvpTurnState === 'p1_select') ? playerLane : opponentLane) === -1 ? 'LEFT' :
-                             ((battleMode === 'campaign' || pvpTurnState === 'p1_select') ? playerLane : opponentLane) === 1 ? 'RIGHT' : 'MID'}
+                            {((battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select') ? playerLane : opponentLane) === -1 ? 'LEFT' :
+                             ((battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select') ? playerLane : opponentLane) === 1 ? 'RIGHT' : 'MID'}
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
@@ -2901,7 +3716,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              const isCurrentP1 = battleMode === 'campaign' || pvpTurnState === 'p1_select';
+                              const isCurrentP1 = battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select';
                               gameAudio.playSelect();
                               if (isCurrentP1) {
                                 movePlayerLeft();
@@ -2910,7 +3725,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                               }
                             }}
                             className={`py-1.5 px-1 text-[11px] font-mono font-bold rounded-xl border flex flex-col items-center justify-center gap-1 transition-all duration-150 ${
-                              (battleMode === 'campaign' || pvpTurnState === 'p1_select')
+                              (battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select')
                                 ? (p1LeftActive
                                   ? 'border-amber-500 text-amber-400 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.4)] scale-95'
                                   : 'border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white active:scale-95')
@@ -2928,7 +3743,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              const isCurrentP1 = battleMode === 'campaign' || pvpTurnState === 'p1_select';
+                              const isCurrentP1 = battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select';
                               gameAudio.playSelect();
                               if (isCurrentP1) {
                                 setPlayerLane(0);
@@ -2937,7 +3752,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                               }
                             }}
                             className={`py-1.5 px-1 text-[11px] font-mono font-bold rounded-xl border flex flex-col items-center justify-center gap-1 transition-all duration-150 ${
-                              ((battleMode === 'campaign' || pvpTurnState === 'p1_select') ? playerLane === 0 : opponentLane === 0)
+                              ((battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select') ? playerLane === 0 : opponentLane === 0)
                                 ? 'border-amber-500/40 text-amber-400 bg-amber-500/5'
                                 : 'border-slate-900 bg-slate-950/40 text-slate-500 hover:border-slate-800 hover:text-slate-300 active:scale-95'
                             }`}
@@ -2951,7 +3766,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              const isCurrentP1 = battleMode === 'campaign' || pvpTurnState === 'p1_select';
+                              const isCurrentP1 = battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select';
                               gameAudio.playSelect();
                               if (isCurrentP1) {
                                 movePlayerRight();
@@ -2960,7 +3775,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                               }
                             }}
                             className={`py-1.5 px-1 text-[11px] font-mono font-bold rounded-xl border flex flex-col items-center justify-center gap-1 transition-all duration-150 ${
-                              (battleMode === 'campaign' || pvpTurnState === 'p1_select')
+                              (battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select')
                                 ? (p1RightActive
                                   ? 'border-amber-500 text-amber-400 bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.4)] scale-95'
                                   : 'border-slate-850 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:text-white active:scale-95')
@@ -2980,42 +3795,55 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
 
                   <div className="grid grid-cols-2 gap-2">
                     {/* If player active is fainted, require switch */}
-                    {(battleMode === 'campaign' && playerTeam[activePlayerIdx].hp <= 0) ||
+                    {((battleMode === 'campaign' || battleMode === 'online') && playerTeam[activePlayerIdx].hp <= 0) ||
                      (battleMode === 'versus' && pvpTurnState === 'p1_select' && playerTeam[activePlayerIdx].hp <= 0) ||
                      (battleMode === 'versus' && pvpTurnState === 'p2_select' && opponentTeam[activeOpponentIdx].hp <= 0) ? (
                       <p className="col-span-2 text-center text-xs text-rose-400 italic py-2">
                         Active Pokémon fainted. Switch out immediately!
                       </p>
                     ) : (
-                      // Render moves of active pokemon
-                      (battleMode === 'campaign' || pvpTurnState === 'p1_select'
-                        ? playerTeam[activePlayerIdx]
-                        : opponentTeam[activeOpponentIdx]
-                      ).moves.map(m => {
-                        const style = getMoveStyle(m.type, isBattleAnimating);
-                        return (
-                          <button
-                            key={m.name}
-                            disabled={isBattleAnimating}
-                            onClick={() => {
-                              if (battleMode === 'campaign') {
-                                resolveCampaignTurn(m);
-                              } else {
-                                submitVersusMove(m);
-                              }
-                            }}
-                            className={`flex flex-col items-start p-1.5 xs:p-2.5 rounded-xl border transition-all text-left ${style.btnClass}`}
-                          >
-                            <span className={`text-[10px] xs:text-xs font-bold leading-tight ${style.nameClass}`}>
-                              {m.name}
-                            </span>
-                            <div className="flex justify-between w-full mt-1 xs:mt-1.5 text-[8px] xs:text-[9px] font-mono text-slate-500 leading-none">
-                              <span>Pwr: {m.power}</span>
-                              <span>Acc: {m.accuracy}%</span>
-                            </div>
-                          </button>
-                        );
-                      })
+                      battleMode === 'online' && isOnlineTurnWaiting ? (
+                        <div className="col-span-2 text-center py-6 bg-slate-950/40 border border-dashed border-slate-850 rounded-xl animate-pulse">
+                          <p className="text-xs text-amber-400 font-mono mb-1">
+                            📡 WAITING FOR OPPONENT...
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            Opponent is selecting their action and dodge position.
+                          </p>
+                        </div>
+                      ) : (
+                        // Render moves of active pokemon
+                        (battleMode === 'campaign' || battleMode === 'online' || pvpTurnState === 'p1_select'
+                          ? playerTeam[activePlayerIdx]
+                          : opponentTeam[activeOpponentIdx]
+                        ).moves.map(m => {
+                          const style = getMoveStyle(m.type, isBattleAnimating);
+                          return (
+                            <button
+                              key={m.name}
+                              disabled={isBattleAnimating}
+                              onClick={() => {
+                                if (battleMode === 'campaign') {
+                                  resolveCampaignTurn(m);
+                                } else if (battleMode === 'online') {
+                                  handleOnlineSubmitMove(m);
+                                } else {
+                                  submitVersusMove(m);
+                                }
+                              }}
+                              className={`flex flex-col items-start p-1.5 xs:p-2.5 rounded-xl border transition-all text-left ${style.btnClass}`}
+                            >
+                              <span className={`text-[10px] xs:text-xs font-bold leading-tight ${style.nameClass}`}>
+                                {m.name}
+                              </span>
+                              <div className="flex justify-between w-full mt-1 xs:mt-1.5 text-[8px] xs:text-[9px] font-mono text-slate-500 leading-none">
+                                <span>Pwr: {m.power}</span>
+                                <span>Acc: {m.accuracy}%</span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )
                     )}
                   </div>
                 </div>
@@ -3033,7 +3861,7 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
               {/* Switch Player 1 */}
               <div className="flex flex-col gap-1.5">
                 <div className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">
-                  {battleMode === 'campaign' ? 'My Party Squad' : 'Player 1 Squad (Drafted)'}
+                  {(battleMode === 'campaign' || battleMode === 'online') ? 'My Party Squad' : 'Player 1 Squad (Drafted)'}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {playerTeam.map((p, idx) => {
@@ -3043,7 +3871,13 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
                       <button
                         key={p.id}
                         disabled={isActive || isFainted || isBattleAnimating || (battleMode === 'versus' && pvpTurnState === 'p2_select')}
-                        onClick={() => handlePlayerSwitch(idx)}
+                        onClick={() => {
+                          if (battleMode === 'online') {
+                            handleOnlinePlayerSwitch(idx);
+                          } else {
+                            handlePlayerSwitch(idx);
+                          }
+                        }}
                         className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all ${
                           isActive
                             ? 'border-amber-500 bg-amber-500/5 text-amber-400 font-bold'
@@ -3150,9 +3984,68 @@ export const PokemonGame: React.FC<PokemonGameProps> = ({
             onRematch={handleRematch}
             onReturnToSelection={handleReturnToSelection}
           />
-
         </div>
         )
+      )}
+
+      {/* INCOMING CHALLENGE POPUP/NOTIFICATION */}
+      {receivedInvite && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-950 border-2 border-rose-500 rounded-3xl p-5 max-w-sm shadow-[0_0_35px_rgba(244,63,94,0.3)] animate-bounce border-t-8 border-t-rose-500">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-rose-500/15 rounded-2xl flex items-center justify-center border border-rose-500/30 animate-pulse text-2xl">
+              📱
+            </div>
+            <div className="flex-1">
+              <h4 className="font-pressstart text-[9px] text-rose-400 tracking-wider">POKÉ-PHONE ALERT</h4>
+              <div className="text-[11px] font-mono text-slate-200 mt-2.5 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-850">
+                You are engaged in a duel with <span className="font-bold text-amber-400 font-sans">{receivedInvite.fromName}</span>! Click ready, click on the ready button, and then the duel will start.
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono mt-1.5 italic">
+                Configure your 3-Pokémon squad in the Online Players tab before hitting ready.
+              </p>
+              <div className="flex gap-2.5 mt-4 justify-end">
+                <button
+                  onClick={handleDeclineInvite}
+                  className="px-3.5 py-2 rounded-xl border border-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-[10px] font-mono uppercase font-bold transition-all"
+                >
+                  Decline
+                </button>
+                <button
+                  onClick={handleAcceptInvite}
+                  className="px-4 py-2 rounded-xl text-[10px] font-mono uppercase font-bold tracking-wider transition-all flex items-center gap-1.5 bg-rose-500 text-white hover:bg-rose-400 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95"
+                >
+                  Click Ready ⚔️
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OUTGOING CHALLENGE WAITING DIALOG MODAL */}
+      {isChallengeModalOpen && sentInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-950 border-2 border-sky-500 rounded-2xl p-6 max-w-md w-full shadow-[0_0_30px_rgba(56,189,248,0.25)] text-center space-y-4">
+            <div className="w-16 h-16 bg-sky-500/10 rounded-full flex items-center justify-center border border-sky-500/20 mx-auto animate-pulse">
+              <span className="text-3xl animate-bounce">📡</span>
+            </div>
+            <h3 className="text-sm uppercase font-pressstart tracking-wider text-sky-400 animate-pulse">
+              Challenging Trainer...
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed font-mono">
+              Waiting for <span className="text-amber-400 font-bold font-sans">{sentInvite.toName}</span> to accept your online battle challenge.
+            </p>
+            <div className="text-[10px] text-slate-500 font-mono">
+              Make sure they are on the Online Players tab to accept!
+            </div>
+            <button
+              onClick={handleCancelSentChallenge}
+              className="w-full py-2.5 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-[11px] font-mono uppercase font-bold transition-colors"
+            >
+              Cancel Challenge
+            </button>
+          </div>
+        </div>
       )}
 
     </div>
